@@ -1,0 +1,14 @@
+
+# entorno virtual
+.venv/
+
+# python
+__pycache__/
+*.py[cod]
+
+# archivos generados
+reporte_ventas.xlsx
+
+# configuraciones locales
+.vscode/
+.env
