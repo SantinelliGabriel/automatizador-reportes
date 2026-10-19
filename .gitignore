@@ -12,3 +12,4 @@ reporte_ventas.xlsx
 # configuraciones locales
 .vscode/
 .env
+ventas.db
