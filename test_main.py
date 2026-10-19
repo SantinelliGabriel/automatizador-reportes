@@ -8,6 +8,10 @@ import pandas as pd
 import main
 from main import validar_ventas
 
+import database
+import main
+from main import validar_ventas
+
 
 class TestValidacionesVentas(unittest.TestCase):
 
@@ -84,17 +88,17 @@ class TestBaseDeDatos(unittest.TestCase):
         self.carpeta_temporal = tempfile.TemporaryDirectory()
         self.archivo_bd = Path(self.carpeta_temporal.name) / "pruebas.db"
 
-        self.parche_bd = patch.object(main, "ARCHIVO_BD", self.archivo_bd)
+        self.parche_bd = patch.object(database, "ARCHIVO_BD", self.archivo_bd)
         self.parche_bd.start()
 
         self.addCleanup(self.parche_bd.stop)
         self.addCleanup(self.carpeta_temporal.cleanup)
 
-        main.crear_tabla()
+        database.crear_tabla()
 
     def test_crea_tabla_ventas(self):
         """Comprueba que se crea la tabla de ventas."""
-        conexion = main.conectar_bd()
+        conexion = database.conectar_bd()
 
         try:
             resultado = conexion.execute(
@@ -118,8 +122,8 @@ class TestBaseDeDatos(unittest.TestCase):
             "precio_unitario": [12000, 7500],
         })
 
-        main.guardar_ventas(ventas)
-        resultado = main.consultar_ventas()
+        database.guardar_ventas(ventas)
+        resultado = database.consultar_ventas()
 
         self.assertEqual(len(resultado), 2)
         self.assertEqual(resultado["producto"].tolist(), ["Teclado", "Mouse"])
@@ -134,10 +138,10 @@ class TestBaseDeDatos(unittest.TestCase):
             "precio_unitario": [12000, 7500],
         })
 
-        main.guardar_ventas(ventas)
-        main.guardar_ventas(ventas)
+        database.guardar_ventas(ventas)
+        database.guardar_ventas(ventas)
 
-        resultado = main.consultar_ventas()
+        resultado = database.consultar_ventas()
 
         self.assertEqual(len(resultado), 2)
         self.assertEqual(resultado["producto"].tolist(), ["Teclado", "Mouse"])
@@ -145,7 +149,7 @@ class TestBaseDeDatos(unittest.TestCase):
 
     def test_base_de_datos_inicialmente_vacia(self):
         """Comprueba que la tabla no tenga ventas al crearse."""
-        resultado = main.consultar_ventas()
+        resultado = database.consultar_ventas()
 
         self.assertTrue(resultado.empty)
         self.assertEqual(
@@ -168,17 +172,17 @@ class TestBaseDeDatos(unittest.TestCase):
             "precio_unitario": [150000],
         })
 
-        main.guardar_ventas(ventas_originales)
+        database.guardar_ventas(ventas_originales)
 
         with patch.object(
-            main,
+            database,
             "conectar_bd",
             side_effect=RuntimeError("Error simulado"),
         ):
             with self.assertRaisesRegex(RuntimeError, "Error simulado"):
-                main.guardar_ventas(ventas_nuevas)
+                database.guardar_ventas(ventas_nuevas)
 
-        resultado = main.consultar_ventas()
+        resultado = database.consultar_ventas()
 
         self.assertEqual(
             resultado["producto"].tolist(),
@@ -201,9 +205,9 @@ class TestBaseDeDatos(unittest.TestCase):
             "precio_unitario": [150000],
         })
 
-        main.guardar_ventas(ventas_originales)
+        database.guardar_ventas(ventas_originales)
 
-        conexion_original = main.conectar_bd
+        conexion_original = database.conectar_bd
 
         def conectar_con_error():
             conexion = conexion_original()
@@ -222,7 +226,7 @@ class TestBaseDeDatos(unittest.TestCase):
             return conexion
 
         with patch.object(
-            main,
+            database,
             "conectar_bd",
             side_effect=conectar_con_error,
         ):
@@ -230,9 +234,9 @@ class TestBaseDeDatos(unittest.TestCase):
                 Exception,
                 "Error de inserción simulado",
             ):
-                main.guardar_ventas(ventas_nuevas)
+                database.guardar_ventas(ventas_nuevas)
 
-        resultado = main.consultar_ventas()
+        resultado = database.consultar_ventas()
 
         self.assertEqual(
             resultado["producto"].tolist(),
@@ -254,9 +258,9 @@ class TestBaseDeDatos(unittest.TestCase):
             "precio_unitario": [150000],
         })
 
-        main.guardar_ventas(ventas_originales)
+        database.guardar_ventas(ventas_originales)
 
-        conexion_original = main.conectar_bd
+        conexion_original = database.conectar_bd
 
         def conectar_con_error():
             conexion = conexion_original()
@@ -275,7 +279,7 @@ class TestBaseDeDatos(unittest.TestCase):
             return conexion
 
         with patch.object(
-            main,
+            database,
             "conectar_bd",
             side_effect=conectar_con_error,
         ):
@@ -283,9 +287,9 @@ class TestBaseDeDatos(unittest.TestCase):
                 Exception,
                 "Error de inserción simulado",
             ):
-                main.guardar_ventas(ventas_nuevas)
+                database.guardar_ventas(ventas_nuevas)
 
-        resultado = main.consultar_ventas()
+        resultado = database.consultar_ventas()
 
         self.assertEqual(
             resultado["producto"].tolist(),
@@ -301,8 +305,8 @@ class TestBaseDeDatos(unittest.TestCase):
             "precio_unitario": [12000, 7500],
         })
 
-        main.guardar_ventas(ventas)
-        resultado = main.consultar_ventas()
+        database.guardar_ventas(ventas)
+        resultado = database.consultar_ventas()
 
         self.assertEqual(resultado["total"].tolist(), [60000, 60000])
         self.assertEqual(resultado["total"].sum(), 120000)
