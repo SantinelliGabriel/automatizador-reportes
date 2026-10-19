@@ -1,12 +1,7 @@
 
 import sqlite3
-from pathlib import Path
-
 import pandas as pd
-
-
-CARPETA_PROYECTO = Path(__file__).parent
-ARCHIVO_BD = CARPETA_PROYECTO / "ventas.db"
+from config import ARCHIVO_BD
 
 
 def conectar_bd():

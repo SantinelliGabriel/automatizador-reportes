@@ -4,13 +4,13 @@ from pathlib import Path
 from unittest.mock import patch
 
 import pandas as pd
-
-import main
-from main import validar_ventas
+from openpyxl import load_workbook
 
 import database
 import main
-from main import validar_ventas
+import reportes
+from validaciones import validar_ventas
+
 
 
 class TestValidacionesVentas(unittest.TestCase):
@@ -311,5 +311,167 @@ class TestBaseDeDatos(unittest.TestCase):
         self.assertEqual(resultado["total"].tolist(), [60000, 60000])
         self.assertEqual(resultado["total"].sum(), 120000)
 
+class TestReportes(unittest.TestCase):
+
+    def test_aplica_formato_al_excel(self):
+        """Comprueba que el reporte recibe el formato esperado."""
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            archivo = Path(carpeta) / "reporte.xlsx"
+
+            ventas = pd.DataFrame({
+                "producto": ["Teclado", "Mouse"],
+                "unidades": [2, 3],
+                "precio_unitario": [10000.0, 5000.0],
+                "total": [20000.0, 15000.0],
+            })
+
+            ventas.to_excel(archivo, index=False)
+            reportes.aplicar_formato_excel(archivo)
+
+            libro = load_workbook(archivo)
+
+            try:
+                hoja = libro.active
+
+                self.assertEqual(hoja["A1"].value, "producto")
+                self.assertEqual(hoja.freeze_panes, "A2")
+                self.assertEqual(hoja["A1"].fill.fgColor.rgb, "001F4E78")
+                self.assertEqual(hoja["C2"].number_format, '"$"#,##0.00')
+                self.assertEqual(hoja.auto_filter.ref, "A1:D2")
+            finally:
+                libro.close()
+
+    def test_formatea_correctamente_la_fila_total(self):
+        """Comprueba el formato de la última fila del reporte."""
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            archivo = Path(carpeta) / "reporte.xlsx"
+
+            ventas = pd.DataFrame({
+                "producto": ["Teclado", "Mouse", "TOTAL GENERAL"],
+                "unidades": [2, 3, 5],
+                "precio_unitario": [10000.0, 5000.0, 0],
+                "total": [20000.0, 15000.0, 35000.0],
+            })
+
+            ventas.to_excel(archivo, index=False)
+            reportes.aplicar_formato_excel(archivo)
+
+            libro = load_workbook(archivo)
+
+            try:
+                hoja = libro.active
+                ultima_fila = hoja.max_row
+
+                self.assertEqual(
+                    hoja.cell(ultima_fila, 1).value,
+                    "TOTAL GENERAL",
+                )
+                self.assertTrue(
+                    hoja.cell(ultima_fila, 1).font.bold
+                )
+                self.assertEqual(
+                    hoja.cell(ultima_fila, 1).fill.fgColor.rgb,
+                    "00D9EAF7",
+                )
+                self.assertEqual(
+                    hoja.auto_filter.ref,
+                    f"A1:D{ultima_fila - 1}",
+                )
+            finally:
+                libro.close()
+
+    def test_ajusta_ancho_de_columnas(self):
+        """Comprueba que las columnas se ajusten al contenido."""
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            archivo = Path(carpeta) / "reporte.xlsx"
+
+            ventas = pd.DataFrame({
+                "producto": ["Teclado mecánico profesional"],
+                "unidades": [2],
+                "precio_unitario": [10000.0],
+                "total": [20000.0],
+            })
+
+            ventas.to_excel(archivo, index=False)
+            reportes.aplicar_formato_excel(archivo)
+
+            libro = load_workbook(archivo)
+
+            try:
+                hoja = libro.active
+
+                ancho_esperado = len("Teclado mecánico profesional") + 4
+
+                self.assertGreaterEqual(
+                    hoja.column_dimensions["A"].width,
+                    ancho_esperado,
+                )
+            finally:
+                libro.close()
+
+    def test_formatea_encabezados_correctamente(self):
+        """Comprueba el estilo y la altura de los encabezados."""
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            archivo = Path(carpeta) / "reporte.xlsx"
+
+            ventas = pd.DataFrame({
+                "producto": ["Teclado"],
+                "unidades": [2],
+                "precio_unitario": [10000.0],
+                "total": [20000.0],
+            })
+
+            ventas.to_excel(archivo, index=False)
+            reportes.aplicar_formato_excel(archivo)
+
+            libro = load_workbook(archivo)
+
+            try:
+                hoja = libro.active
+                encabezado = hoja["A1"]
+
+                self.assertTrue(encabezado.font.bold)
+                self.assertEqual(encabezado.font.color.type, "rgb")
+                self.assertEqual(encabezado.font.color.rgb, "00FFFFFF")
+                self.assertEqual(encabezado.fill.fgColor.rgb, "001F4E78")
+                self.assertEqual(hoja.row_dimensions[1].height, 24)
+            finally:
+                libro.close()
+
+    def test_generar_reporte_completo(self):
+        """Comprueba que se genere el reporte con el total correcto."""
+
+        with tempfile.TemporaryDirectory() as carpeta:
+            carpeta_temporal = Path(carpeta)
+            archivo_entrada = carpeta_temporal / "entrada.xlsx"
+            archivo_salida = carpeta_temporal / "reporte.xlsx"
+            archivo_bd = carpeta_temporal / "pruebas.db"
+
+            ventas_entrada = pd.DataFrame({
+                "producto": ["Teclado", "Mouse"],
+                "unidades": [2, 3],
+                "precio_unitario": [10000.0, 5000.0],
+            })
+            ventas_entrada.to_excel(archivo_entrada, index=False)
+
+            with (
+                patch.object(main, "ARCHIVO_ENTRADA", archivo_entrada),
+                patch.object(main, "ARCHIVO_SALIDA", archivo_salida),
+                patch.object(database, "ARCHIVO_BD", archivo_bd),
+            ):
+                main.generar_reporte()
+
+            self.assertTrue(archivo_salida.exists())
+
+            reporte = pd.read_excel(archivo_salida)
+
+            self.assertEqual(len(reporte), 3)
+            self.assertEqual(reporte.iloc[-1]["producto"], "TOTAL GENERAL")
+            self.assertEqual(reporte.iloc[-1]["unidades"], 5)
+            self.assertEqual(reporte.iloc[-1]["total"], 35000.0)
 if __name__ == "__main__":
     unittest.main(verbosity=2)

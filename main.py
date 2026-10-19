@@ -1,18 +1,18 @@
-
-from pathlib import Path
-
 from database import (crear_tabla,guardar_ventas,consultar_ventas,)
 from validaciones import validar_ventas
 from reportes import aplicar_formato_excel
+from config import ARCHIVO_ENTRADA, ARCHIVO_SALIDA
+import logging
 import pandas as pd
 
-CARPETA_PROYECTO = Path(__file__).parent
-ARCHIVO_ENTRADA = CARPETA_PROYECTO / "ventas_entrada.xlsx"
-ARCHIVO_SALIDA = CARPETA_PROYECTO / "reporte_ventas.xlsx"
-ARCHIVO_BD = CARPETA_PROYECTO / "ventas.db"
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 
 def generar_reporte():
     """Lee, valida, calcula y genera el reporte de ventas."""
+    logging.info("Iniciando la generación del reporte.")
 
     if not ARCHIVO_ENTRADA.exists():
         raise FileNotFoundError(
@@ -67,14 +67,14 @@ def generar_reporte():
             "Ocurrió un problema al guardar el reporte."
         ) from error
 
-    print("Reporte generado correctamente.")
-    print(f"Productos procesados: {len(ventas)}")
-    print(f"Total de ventas: ${total_ventas:,.2f}")
-    print(f"Archivo generado: {ARCHIVO_SALIDA}")
+    logging.info("Reporte generado correctamente.")
+    logging.info("Productos procesados: %s", len(ventas))
+    logging.info("Total de ventas: $%s", f"{total_ventas:,.2f}")
+    logging.info("Archivo generado: %s", ARCHIVO_SALIDA)
 
 
 if __name__ == "__main__":
     try:
         generar_reporte()
     except (FileNotFoundError, ValueError, RuntimeError) as error:
-        print(f"ERROR: {error}")
+        logging.error("%s", error)
