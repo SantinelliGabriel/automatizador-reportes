@@ -80,6 +80,53 @@ class TestValidacionesVentas(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "celdas vacías"):
             validar_ventas(self.ventas)
 
+    def test_elimina_espacios_del_nombre_producto(self):
+        ventas = self.ventas.copy()
+        ventas.loc[0, "producto"] = "  Teclado  "
+
+        resultado = validar_ventas(ventas)
+
+        self.assertEqual(resultado.loc[0, "producto"], "Teclado")
+
+    def test_rechaza_precio_infinito(self):
+        ventas = self.ventas.copy()
+        ventas["precio_unitario"] = ventas["precio_unitario"].astype(float)
+        ventas.loc[0, "precio_unitario"] = float("inf")
+
+        with self.assertRaisesRegex(ValueError, "números no válidos"):
+            validar_ventas(ventas)
+
+    def test_rechaza_unidades_nan(self):
+        ventas = self.ventas.copy()
+        ventas.loc[0, "unidades"] = float("nan")
+
+        with self.assertRaisesRegex(ValueError, "celdas vacías"):
+            validar_ventas(ventas)
+
+    def test_rechaza_importe_que_desborda(self):
+        ventas = self.ventas.copy()
+        ventas["unidades"] = ventas["unidades"].astype(float)
+        ventas["precio_unitario"] = ventas["precio_unitario"].astype(float)
+
+        ventas.loc[0, "unidades"] = 1e308
+        ventas.loc[0, "precio_unitario"] = 1e308
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "importe calculado por producto no es válido",
+        ):
+            validar_ventas(ventas)
+
+    def test_rechaza_unidades_fuera_del_rango_de_sqlite(self):
+        ventas = self.ventas.copy()
+        ventas["unidades"] = ventas["unidades"].astype(object)
+        ventas.loc[0, "unidades"] = 2**63
+
+        with self.assertRaisesRegex(
+            ValueError,
+            "unidades están fuera del rango permitido",
+        ):
+            validar_ventas(ventas)
 
 class TestBaseDeDatos(unittest.TestCase):
 

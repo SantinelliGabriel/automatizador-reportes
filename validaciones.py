@@ -28,9 +28,9 @@ def validar_ventas(ventas):
     if ventas[COLUMNAS_REQUERIDAS].isna().any().any():
         raise ValueError("Hay celdas vacías en los datos de ventas.")
 
-    nombres = ventas["producto"].astype(str).str.strip()
+    ventas["producto"] = ventas["producto"].astype(str).str.strip()
 
-    if nombres.eq("").any():
+    if ventas["producto"].eq("").any():
         raise ValueError("Hay productos sin nombre.")
 
     for columna in ["unidades", "precio_unitario"]:
@@ -59,5 +59,17 @@ def validar_ventas(ventas):
 
     if (ventas["precio_unitario"] < 0).any():
         raise ValueError("Los precios no pueden ser negativos.")
+
+    subtotales = ventas["unidades"] * ventas["precio_unitario"]
+
+    if not subtotales.map(
+        lambda valor: pd.notna(valor) and abs(valor) != float("inf")
+    ).all():
+        raise ValueError("El importe calculado por producto no es válido.")
+
+    if (ventas["unidades"] > 2**63 - 1).any():
+        raise ValueError(
+            "Las unidades están fuera del rango permitido por SQLite."
+        )
 
     return ventas
