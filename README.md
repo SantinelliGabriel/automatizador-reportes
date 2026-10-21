@@ -142,7 +142,3 @@ La interfaz funciona en el entorno local. Para publicarla en un hosting hay que 
 2. Reportes separados de débito/crédito fiscal y gráficos.
 3. Pruebas con archivos anonimizados de distintas versiones de ARCA y Holistor.
 4. Exportación a Libro IVA Digital solo después de verificar el [diseño vigente de registros y tablas de ARCA](https://arca.gob.ar/libro-iva-digital/documentos/libro-iva-digital-diseno-registros.pdf), que puede cambiar.
-
-## Datos y privacidad
-
-No incluyas CUIT, razones sociales, comprobantes ni importes reales en el repositorio. Los archivos de `datos_demo` se generan con datos sintéticos. La base local y los reportes generados están excluidos del control de versiones.
