@@ -13,7 +13,10 @@ class TestReportes(unittest.TestCase):
     def test_notas_de_credito_y_debito_ajustan_resumen_y_alicuota(self):
         venta = comprobante()
         nota_credito = comprobante(tipo_comprobante="NC A", numero=102, neto_gravado=10000, iva=2100, total=12100)
-        nota_debito = comprobante(tipo_comprobante="ND A", numero=103, neto_gravado=5000, iva=1050, total=6050)
+        nota_debito = comprobante(
+            tipo_comprobante="ND A", numero=103, neto_gravado=5000,
+            alicuota=10.5, iva=525, total=5525,
+        )
         buenos, malos = validar_comprobantes(
             pd.DataFrame([venta, nota_credito, nota_debito]), "2026-09"
         )
@@ -25,7 +28,10 @@ class TestReportes(unittest.TestCase):
         self.assertEqual(len(detalle), 3)
         self.assertTrue(malos.empty)
         self.assertEqual(por_cliente.iloc[0]["neto_gravado"], 95000)
-        self.assertEqual(por_cliente.iloc[0]["iva"], 19950)
-        self.assertEqual(por_cliente.iloc[0]["total"], 114950)
-        self.assertEqual(por_alicuota.iloc[0]["neto_gravado"], 95000)
-        self.assertEqual(por_alicuota.iloc[0]["iva"], 19950)
+        self.assertEqual(por_cliente.iloc[0]["iva"], 19425)
+        self.assertEqual(por_cliente.iloc[0]["total"], 114425)
+        por_tasa = por_alicuota.set_index("alicuota")
+        self.assertEqual(por_tasa.loc[21.0, "neto_gravado"], 90000)
+        self.assertEqual(por_tasa.loc[21.0, "iva"], 18900)
+        self.assertEqual(por_tasa.loc[10.5, "neto_gravado"], 5000)
+        self.assertEqual(por_tasa.loc[10.5, "iva"], 525)
