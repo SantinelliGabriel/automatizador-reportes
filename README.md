@@ -130,7 +130,7 @@ GitHub Actions ejecuta los controles en Linux y Windows.
 ```text
 automatizador/                  Paquete: lógica, CLI, adaptadores e interfaz
 tests/                          Pruebas por módulo
-tests/fixtures/arca/             CSV sintético de Mis Comprobantes
+tests/fixtures/arca/            CSV sintético de Mis Comprobantes
 ejemplos/                       Entradas, salida y calendario sintéticos
 datos_demo/                     Archivos sintéticos de demostración
 docs/                           Guías técnicas e imágenes
