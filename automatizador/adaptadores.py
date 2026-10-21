@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from validaciones import clave_encabezado, normalizar_columnas
+from automatizador.validaciones import clave_encabezado, normalizar_columnas
 
 
 ARCA_CAMPOS = {

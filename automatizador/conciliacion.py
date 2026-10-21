@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from adaptadores import _num, _leer
+from automatizador.adaptadores import _num, _leer
 
 
 def conciliar_banco(path, comprobantes, columna_fecha, columna_importe,

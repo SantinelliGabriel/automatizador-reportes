@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pandas as pd
 
-from config import ARCHIVO_BD
+from automatizador.config import ARCHIVO_BD
 
 
 def conectar_bd(ruta=None):

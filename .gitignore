@@ -5,6 +5,14 @@
 # python
 __pycache__/
 *.py[cod]
+build/
+dist/
+*.egg-info/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+.test_tmp/
 
 # archivos generados
 reporte_ventas.xlsx
