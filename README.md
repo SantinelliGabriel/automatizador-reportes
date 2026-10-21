@@ -2,12 +2,11 @@
 
 [![CI](https://github.com/SantinelliGabriel/automatizador-reportes/actions/workflows/tests.yml/badge.svg)](https://github.com/SantinelliGabriel/automatizador-reportes/actions/workflows/tests.yml) [![Cobertura](https://img.shields.io/codecov/c/github/SantinelliGabriel/automatizador-reportes/main?logo=codecov)](https://codecov.io/gh/SantinelliGabriel/automatizador-reportes) [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/) [![Demo en Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/)
 
-**English summary:** A Python tool for validating accounting vouchers and producing monthly VAT reports.<br>
-It combines source adapters, SQLite history, bank reconciliation, and a synthetic Streamlit demo.
-
-**Estado:** proyecto personal de portfolio · **Versión declarada:** 0.1.0
-
 Herramienta para revisar comprobantes de ventas y compras, registrar observaciones y producir informes mensuales en Excel.
+
+<sub><strong>English summary:</strong> A Python tool for validating invoices and credit/debit notes, importing ARCA exports, and producing Argentine VAT (IVA) reports.<br>It combines source adapters, SQLite history, bank reconciliation, and a synthetic Streamlit demo.</sub>
+
+**Estado:** proyecto personal de portfolio · **Versión:** [0.1.0](CHANGELOG.md)
 
 ![Interfaz de la demo con datos sintéticos](docs/images/interfaz-demo.jpg)
 
@@ -25,7 +24,7 @@ Un estudio contable recibe archivos de varios clientes y necesita revisar compro
 
 ### Importación y validación
 - Procesa ventas y compras; valida CUIT, período, tipo, alícuotas, importes y duplicados.
-- Reconoce alias de encabezados y conserva comprobantes con varias alícuotas cuando el origen incluye el desglose.
+- Reconoce alias de encabezados, usa el `tipo_cambio` informado en el archivo y conserva el desglose de varias alícuotas por comprobante cuando viene en el origen.
 
 ### Informes
 - Produce hojas de comprobantes, detalle de IVA, resúmenes por cliente y alícuota y observaciones.
@@ -35,7 +34,7 @@ Un estudio contable recibe archivos de varios clientes y necesita revisar compro
 
 ### Integraciones
 - Importa archivos estándar, exportaciones de Mis Comprobantes ARCA y plantillas Holistor.
-- Sugiere coincidencias para extractos bancarios y calcula fechas usando un calendario de vencimientos aportado por el usuario.
+- Sugiere coincidencias para extractos bancarios y consulta vencimientos por terminación de CUIT en un calendario cargado por el usuario.
 
 ### Interfaces
 - CLI instalable, interfaz Streamlit local y demo con datos sintéticos sin carga de archivos.
@@ -45,7 +44,7 @@ Un estudio contable recibe archivos de varios clientes y necesita revisar compro
 **Demo en vivo:** [Abrir la aplicación](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/)
 
 Ejecución local en PowerShell, macOS o Linux:
-```
+```bash
 streamlit run demo.py
 ```
 Guía de [configuración y despliegue](docs/demo-streamlit.md).
@@ -66,19 +65,22 @@ source .venv/bin/activate
 python -m pip install -e .
 automatizador --period 2026-09
 ```
+`automatizador-demo` crea dos archivos sintéticos en `datos_demo/`. Sin `--input`, la CLI usa `ejemplos/Cliente Demo Norte.xlsx`; genera `reporte_iva.xlsx` y `comprobantes.db` en el directorio actual. `--period` es obligatorio.
 
 Para procesar una carpeta con rutas explícitas, PowerShell:
 ```powershell
+automatizador-demo
 automatizador `
-  --input datos/clientes `
+  --input datos_demo `
   --output resultados/reporte.xlsx `
   --database resultados/comprobantes.db `
   --period 2026-09
 ```
 macOS o Linux:
 ```bash
+automatizador-demo
 automatizador \
-  --input datos/clientes \
+  --input datos_demo \
   --output resultados/reporte.xlsx \
   --database resultados/comprobantes.db \
   --period 2026-09
@@ -107,21 +109,17 @@ flowchart LR
 ## Limitaciones y próximos pasos
 - No hay conexión directa a ARCA ni Holistor; detalles en [adaptadores](docs/adaptadores.md).
 - La [conciliación](docs/conciliacion.md) sugiere coincidencias para revisión; la [agenda](docs/vencimientos.md) requiere mantener un calendario.
-- La demo pública usa el ejemplo sintético y oculta la carga. La URL pública debe comprobarse en el servicio.
-- Próximos pasos: ampliar fixtures sintéticos por versión, sumar reportes de IVA y cubrir más variantes de conciliación.
+- La demo usa el ejemplo sintético y oculta la carga de archivos.
+- Próximos pasos: ampliar fixtures sintéticos para distintas variantes de ARCA/Holistor y preparar un ejecutable de Windows con PyInstaller.
 
 ## Desarrollo
 
 Instalación y controles de calidad, desde la raíz del repo:
-```powershell
-python -m pip install -e ".[dev]"
-ruff check .
-coverage run -m unittest discover -s tests -v
-```
 ```bash
 python -m pip install -e ".[dev]"
 ruff check .
 coverage run -m unittest discover -s tests -v
+coverage report -m
 ```
 GitHub Actions ejecuta los controles en Linux y Windows.
 
@@ -146,7 +144,7 @@ LICENSE                         Licencia MIT
 
 ## Datos y privacidad
 
-Los ejemplos incluidos son sintéticos. `.gitignore` excluye las bases SQLite y los informes predeterminados `reporte_ventas.xlsx` y `reporte_iva.xlsx`; otras rutas de salida no se excluyen automáticamente.
+Los ejemplos incluidos son sintéticos. `.gitignore` excluye `*.db`, `reporte_*.xlsx` y los directorios `datos/` y `resultados/`, usados para entradas y salidas locales.
 
 ## Licencia
 
