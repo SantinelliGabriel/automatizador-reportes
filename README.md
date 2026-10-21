@@ -6,7 +6,7 @@ Herramienta para revisar comprobantes de ventas y compras, registrar observacion
 
 <sub><strong>English summary:</strong> A Python tool for validating invoices and credit/debit notes, importing ARCA exports, and producing Argentine VAT (IVA) reports.<br>It combines source adapters, SQLite history, bank reconciliation, and a synthetic Streamlit demo.</sub>
 
-**Estado:** proyecto personal de portfolio · **Versión:** [0.1.0](CHANGELOG.md)
+**Estado:** proyecto personal de portfolio · **Versión:** [0.1.1](CHANGELOG.md)
 
 ![Recorrido de la demo sintética y el informe Excel generado](docs/images/flujo-demo.gif)
 
