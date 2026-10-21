@@ -1,7 +1,7 @@
 """Construye el libro consolidado de comprobantes y observaciones."""
 
 from openpyxl import load_workbook
-from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 import pandas as pd
 
