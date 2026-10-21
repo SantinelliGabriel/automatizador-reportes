@@ -10,6 +10,17 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = { file = "LICENSE" }
 authors = [{ name = "Gabriel Santinelli" }]
+keywords = ["contabilidad", "IVA", "ARCA", "Holistor", "Excel", "conciliacion"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Financial and Insurance Industry",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Topic :: Office/Business :: Financial :: Accounting",
+]
+urls = { Homepage = "https://github.com/SantinelliGabriel/automatizador-reportes", Repository = "https://github.com/SantinelliGabriel/automatizador-reportes", Issues = "https://github.com/SantinelliGabriel/automatizador-reportes/issues", Changelog = "https://github.com/SantinelliGabriel/automatizador-reportes/blob/main/CHANGELOG.md" }
 dependencies = [
   "pandas==3.0.6",
   "openpyxl==3.1.5",
