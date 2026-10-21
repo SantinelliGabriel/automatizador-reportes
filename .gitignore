@@ -15,10 +15,11 @@ htmlcov/
 .test_tmp/
 
 # archivos generados
-reporte_ventas.xlsx
-reporte_iva.xlsx
+reporte_*.xlsx
 comprobantes.db
 *.db
+datos/
+resultados/
 
 # configuraciones locales
 .vscode/
