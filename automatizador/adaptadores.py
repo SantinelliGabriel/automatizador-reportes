@@ -126,11 +126,11 @@ def _mapear_arca(df, operacion):
             tipo_texto = unicodedata.normalize("NFKD", tipo_raw.upper().replace("_", " "))
             tipo_texto = "".join(c for c in tipo_texto if not unicodedata.combining(c))
             tipo_texto = " ".join(tipo_texto.split())
-            for etiqueta, codigo in (("FACTURA A", "1"), ("NOTA DE DEBITO A", "2"), ("NOTA DE CRÉDITO A", "3"),
-                                     ("FACTURA B", "6"), ("NOTA DE DEBITO B", "7"), ("NOTA DE CRÉDITO B", "8"),
-                                     ("FACTURA C", "11"), ("NOTA DE DEBITO C", "12"), ("NOTA DE CRÉDITO C", "13"),
-                                     ("FACTURA E", "19"), ("NOTA DE DEBITO E", "20"), ("NOTA DE CRÉDITO E", "21"),
-                                     ("FACTURA M", "51"), ("NOTA DE DEBITO M", "52"), ("NOTA DE CRÉDITO M", "53")):
+            for etiqueta, codigo in (("FACTURA A", "1"), ("NOTA DE DEBITO A", "2"), ("NOTA DE CREDITO A", "3"),
+                                     ("FACTURA B", "6"), ("NOTA DE DEBITO B", "7"), ("NOTA DE CREDITO B", "8"),
+                                     ("FACTURA C", "11"), ("NOTA DE DEBITO C", "12"), ("NOTA DE CREDITO C", "13"),
+                                     ("FACTURA E", "19"), ("NOTA DE DEBITO E", "20"), ("NOTA DE CREDITO E", "21"),
+                                     ("FACTURA M", "51"), ("NOTA DE DEBITO M", "52"), ("NOTA DE CREDITO M", "53")):
                 if etiqueta in tipo_texto:
                     tipo = TIPOS_ARCA[codigo]
                     break
@@ -192,12 +192,18 @@ def _mapear_arca(df, operacion):
                 error = _agregar_error(error, "Número de comprobante inválido.")
 
         alicuota = 0.0
-        if len(activos) > 1:
-            error = _agregar_error(error, "El comprobante tiene varias alícuotas y requiere desagregar el detalle por tasa.")
-        elif activos:
+        detalle_alicuotas = [
+            {"alicuota": tasa, "neto_gravado": importes[0], "iva": importes[1]}
+            for tasa, importes in sorted(activos.items())
+        ]
+        if len(activos) == 1:
             alicuota = next(iter(activos))
             if alicuota != 0 and activos[alicuota][0] and not activos[alicuota][1]:
                 error = _agregar_error(error, "Falta el importe de IVA para la alícuota identificada.")
+        elif len(activos) > 1:
+            # El detalle por tasa está completo; no hace falta inferir una
+            # única tasa desde los importes agregados.
+            alicuota = 0.0
         elif neto and iva:
             candidatas = [t for t in TASAS if abs(round(neto * t / 100, 2) - round(iva, 2)) <= 0.01]
             if len(candidatas) == 1:
@@ -222,6 +228,7 @@ def _mapear_arca(df, operacion):
             "no_gravado_exento": no_gravado + exento,
             "percepciones": otros, "total": total,
             "moneda": moneda, "tipo_cambio": tipo_cambio,
+            "detalle_alicuotas": detalle_alicuotas,
             "_error_adaptador": error,
         }
         filas.append(record)

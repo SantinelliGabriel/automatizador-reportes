@@ -1,6 +1,7 @@
 """Persistencia de comprobantes por cliente y período."""
 
 import sqlite3
+import json
 from decimal import Decimal
 
 import pandas as pd
@@ -45,6 +46,7 @@ def crear_tabla(ruta=None):
             no_gravado_exento_origen_centavos INTEGER NOT NULL DEFAULT 0,
             percepciones_origen_centavos INTEGER NOT NULL DEFAULT 0,
             total_origen_centavos INTEGER NOT NULL DEFAULT 0,
+            detalle_alicuotas_json TEXT NOT NULL DEFAULT '[]',
             UNIQUE(cliente, periodo, operacion, tipo_comprobante, punto_venta, numero, cuit)
         )""")
         columnas_comprobantes = {r[1] for r in conexion.execute("PRAGMA table_info(comprobantes)")}
@@ -56,6 +58,7 @@ def crear_tabla(ruta=None):
             "no_gravado_exento_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
             "percepciones_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
             "total_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+            "detalle_alicuotas_json": "TEXT NOT NULL DEFAULT '[]'",
         }
         for nombre, tipo in migraciones.items():
             if nombre not in columnas_comprobantes:
@@ -81,56 +84,84 @@ def _centavos(valor):
     return int(Decimal(str(valor)) * 100)
 
 
-def reemplazar_periodo(cliente, periodo, comprobantes, rechazados, archivo_origen, ruta=None):
-    """Reemplaza atómicamente los comprobantes aceptados de un cliente y período."""
+def _reemplazar_periodo_en_conexion(conexion, cliente, periodo, comprobantes, rechazados, archivo_origen):
+    conexion.execute("DELETE FROM comprobantes WHERE cliente = ? AND periodo = ?", (cliente, periodo))
+    columnas_importacion = {r[1] for r in conexion.execute("PRAGMA table_info(importaciones)")}
+    campos = ["archivo_origen", "cliente", "periodo", "aceptados", "rechazados"]
+    valores = [archivo_origen, cliente, periodo, len(comprobantes), len(rechazados)]
+    if "cantidad_ventas" in columnas_importacion:
+        campos.append("cantidad_ventas")
+        valores.append(len(comprobantes))
+    if "total_centavos" in columnas_importacion:
+        campos.append("total_centavos")
+        valores.append(sum(_centavos(x) for x in comprobantes.get("total", [])))
+    sql = f"INSERT INTO importaciones({', '.join(campos)}) VALUES ({', '.join('?' for _ in campos)})"
+    cur = conexion.execute(sql, valores)
+    importacion_id = cur.lastrowid
+    registros = []
+    for fila in comprobantes.to_dict("records"):
+        registros.append((
+            importacion_id, cliente, periodo, fila["operacion"], fila["fecha"],
+            fila["tipo_comprobante"], int(fila["punto_venta"]), int(fila["numero"]),
+            fila["cuit"], fila["razon_social"], _centavos(fila["neto_gravado"]),
+            float(fila["alicuota"]), _centavos(fila["iva"]),
+            _centavos(fila["no_gravado_exento"]), _centavos(fila["percepciones"]),
+            _centavos(fila["total"]), fila.get("moneda", "ARS"),
+            float(fila.get("tipo_cambio", 1)),
+            _centavos(fila.get("neto_gravado_origen", fila["neto_gravado"])),
+            _centavos(fila.get("iva_origen", fila["iva"])),
+            _centavos(fila.get("no_gravado_exento_origen", fila["no_gravado_exento"])),
+            _centavos(fila.get("percepciones_origen", fila["percepciones"])),
+            _centavos(fila.get("total_origen", fila["total"])),
+            json.dumps(fila.get("detalle_alicuotas", []), ensure_ascii=False),
+        ))
+    conexion.executemany("""INSERT INTO comprobantes(
+        importacion_id, cliente, periodo, operacion, fecha, tipo_comprobante,
+        punto_venta, numero, cuit, razon_social, neto_gravado_centavos,
+        alicuota, iva_centavos, no_gravado_exento_centavos,
+        percepciones_centavos, total_centavos, moneda, tipo_cambio,
+        neto_gravado_origen_centavos, iva_origen_centavos,
+        no_gravado_exento_origen_centavos, percepciones_origen_centavos,
+        total_origen_centavos, detalle_alicuotas_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", registros)
+    return importacion_id
+
+
+def reemplazar_periodos(importaciones, ruta=None):
+    """Aplica varios reemplazos en una única transacción SQLite."""
     conexion = conectar_bd(ruta)
     try:
         conexion.execute("BEGIN IMMEDIATE")
-        conexion.execute("DELETE FROM comprobantes WHERE cliente = ? AND periodo = ?", (cliente, periodo))
-        columnas_importacion = {r[1] for r in conexion.execute("PRAGMA table_info(importaciones)")}
-        campos = ["archivo_origen", "cliente", "periodo", "aceptados", "rechazados"]
-        valores = [archivo_origen, cliente, periodo, len(comprobantes), len(rechazados)]
-        if "cantidad_ventas" in columnas_importacion:
-            campos.append("cantidad_ventas")
-            valores.append(len(comprobantes))
-        if "total_centavos" in columnas_importacion:
-            campos.append("total_centavos")
-            valores.append(sum(_centavos(x) for x in comprobantes.get("total", [])))
-        sql = f"INSERT INTO importaciones({', '.join(campos)}) VALUES ({', '.join('?' for _ in campos)})"
-        cur = conexion.execute(sql, valores)
-        importacion_id = cur.lastrowid
-        registros = []
-        for fila in comprobantes.to_dict("records"):
-            registros.append((
-                importacion_id, cliente, periodo, fila["operacion"], fila["fecha"],
-                fila["tipo_comprobante"], int(fila["punto_venta"]), int(fila["numero"]),
-                fila["cuit"], fila["razon_social"], _centavos(fila["neto_gravado"]),
-                float(fila["alicuota"]), _centavos(fila["iva"]),
-                _centavos(fila["no_gravado_exento"]), _centavos(fila["percepciones"]),
-                _centavos(fila["total"]), fila.get("moneda", "ARS"),
-                float(fila.get("tipo_cambio", 1)),
-                _centavos(fila.get("neto_gravado_origen", fila["neto_gravado"])),
-                _centavos(fila.get("iva_origen", fila["iva"])),
-                _centavos(fila.get("no_gravado_exento_origen", fila["no_gravado_exento"])),
-                _centavos(fila.get("percepciones_origen", fila["percepciones"])),
-                _centavos(fila.get("total_origen", fila["total"])),
-            ))
-        conexion.executemany("""INSERT INTO comprobantes(
-            importacion_id, cliente, periodo, operacion, fecha, tipo_comprobante,
-            punto_venta, numero, cuit, razon_social, neto_gravado_centavos,
-            alicuota, iva_centavos, no_gravado_exento_centavos,
-            percepciones_centavos, total_centavos, moneda, tipo_cambio,
-            neto_gravado_origen_centavos, iva_origen_centavos,
-            no_gravado_exento_origen_centavos, percepciones_origen_centavos,
-            total_origen_centavos
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", registros)
+        ids = [
+            _reemplazar_periodo_en_conexion(
+                conexion,
+                item["cliente"],
+                item["periodo"],
+                item["comprobantes"],
+                item["rechazados"],
+                item["archivo_origen"],
+            )
+            for item in importaciones
+        ]
         conexion.commit()
-        return importacion_id
+        return ids
     except Exception:
         conexion.rollback()
         raise
     finally:
         conexion.close()
+
+
+def reemplazar_periodo(cliente, periodo, comprobantes, rechazados, archivo_origen, ruta=None):
+    """Compatibilidad para reemplazar un cliente/período en una transacción."""
+    ids = reemplazar_periodos([{
+        "cliente": cliente,
+        "periodo": periodo,
+        "comprobantes": comprobantes,
+        "rechazados": rechazados,
+        "archivo_origen": archivo_origen,
+    }], ruta)
+    return ids[0]
 
 
 def consultar_comprobantes(ruta=None, periodo=None):
@@ -147,14 +178,21 @@ def consultar_comprobantes(ruta=None, periodo=None):
             iva_origen_centavos / 100.0 AS iva_origen,
             no_gravado_exento_origen_centavos / 100.0 AS no_gravado_exento_origen,
             percepciones_origen_centavos / 100.0 AS percepciones_origen,
-            total_origen_centavos / 100.0 AS total_origen
+            total_origen_centavos / 100.0 AS total_origen,
+            detalle_alicuotas_json
             FROM comprobantes"""
         params = ()
         if periodo:
             consulta += " WHERE periodo = ?"
             params = (periodo,)
         consulta += " ORDER BY cliente, fecha, punto_venta, numero"
-        return pd.read_sql_query(consulta, conexion, params=params)
+        resultado = pd.read_sql_query(consulta, conexion, params=params)
+        if "detalle_alicuotas_json" in resultado:
+            resultado["detalle_alicuotas"] = resultado["detalle_alicuotas_json"].map(
+                lambda valor: json.loads(valor) if valor else []
+            )
+            resultado = resultado.drop(columns=["detalle_alicuotas_json"])
+        return resultado
     finally:
         conexion.close()
 

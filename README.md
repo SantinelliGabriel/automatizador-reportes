@@ -17,13 +17,14 @@ Un estudio contable recibe archivos de varios clientes y necesita revisar compro
 - Importa comprobantes de ventas y compras con fecha, tipo, punto de venta, número, CUIT, razón social, neto gravado, alícuota, IVA, importes no gravados o exentos, percepciones y total.
 - Acepta alias de encabezados en español e inglés, ignorando mayúsculas, acentos, espacios y guiones.
 - Valida CUIT, tipos de comprobante, alícuotas, fechas del período, conciliación de importes y duplicados.
+- Admite varias líneas de alícuota por comprobante cuando el archivo origen informa neto e IVA desglosados por tasa.
 - Acepta moneda y tipo de cambio opcionales; valida los importes de origen y convierte a ARS para conservar reportes comparables. Guarda moneda, cotización e importes originales para revisión.
 - Exporta las filas observadas a la hoja `Observaciones`, con número de fila y motivo.
 - Procesa un archivo por cliente y reemplaza solo la combinación de cliente y período importada; conserva los demás períodos.
 - Guarda comprobantes e historial de importaciones en SQLite.
-- Genera las hojas `Comprobantes`, `Resumen por cliente`, `IVA por alícuota` y `Observaciones`.
+- Genera las hojas `Comprobantes`, `Detalle IVA`, `Resumen por cliente`, `IVA por alícuota` y `Observaciones`.
 - Incluye adaptadores para Excel/CSV estándar, descargas de Mis Comprobantes ARCA y plantillas Holistor con mapeo editable.
-- Concilia movimientos bancarios firmados con comprobantes por importe y fecha, asignando cada movimiento una sola vez.
+- Concilia movimientos bancarios por importe y fecha, prioriza referencias de comprobante y marca empates, pagos parciales o agrupados para revisión.
 - Consulta vencimientos por CUIT a partir de un calendario oficial cargado por el usuario.
 - Ofrece una interfaz local en Streamlit para importar, conciliar y consultar vencimientos.
 - Incluye un modo demo con datos ficticios y sin controles para cargar archivos.
@@ -95,19 +96,21 @@ automatizador --history
 
 ### Adaptadores ARCA y Holistor
 
+La interfaz muestra una vista previa de válidos y observados antes de aplicar cambios en la base. Los archivos válidos se confirman en una transacción; los períodos de archivos con errores o sin filas aceptadas se conservan.
+
 Para una descarga de `Mis Comprobantes`, indicá el formato de origen y si se trata de emitidos o recibidos:
 
 ```powershell
 automatizador --input compras.csv --source arca --operation compras --period 2026-09
 ```
 
-Si una descarga agrupa varias alícuotas o no permite separar percepciones y otros tributos de forma inequívoca, la fila queda observada para revisión en el comprobante fuente. Para moneda extranjera, completá `moneda` y `tipo_cambio`; la cotización debe indicar cuántos ARS corresponden a una unidad de esa moneda. El informe conserva importes originales y usa valores convertidos a ARS en sus resúmenes. Para ARS, el tipo de cambio es 1.
+Si una descarga informa varias alícuotas con neto e IVA desglosados por tasa, el informe las conserva en `Detalle IVA` y `IVA por alícuota`. Si falta el desglose necesario o no se pueden separar percepciones y otros tributos con fiabilidad, la fila queda observada para revisión en el comprobante fuente. Para moneda extranjera, completá `moneda` y `tipo_cambio`; la cotización debe indicar cuántos ARS corresponden a una unidad de esa moneda. El informe conserva importes originales y usa valores convertidos a ARS en sus resúmenes. Para ARS, el tipo de cambio es 1.
 
 Holistor distribuye modelos vinculados a sus productos y versiones. El adaptador acepta Excel/CSV con encabezados mapeables y archivos `.prn` configurados con JSON. La [guía de Holistor](https://soporte.holistor.com.ar/portal/es/kb/articles/iva-importacion-de-mis-comprobantes-emitidos) describe modelos para cargar datos exportados desde ARCA; no se presupone un ancho fijo universal. La configuración de ejemplo está en `holistor_mapping.example.json`.
 
 ### Conciliación bancaria
 
-En la interfaz local, seleccioná las columnas de fecha e importe de un extracto CSV/Excel. Los importes deben venir firmados: créditos positivos para ventas y débitos negativos para compras. El margen de días y la tolerancia de importe son configurables.
+En la interfaz local, seleccioná las columnas de fecha e importe de un extracto CSV/Excel. Los importes deben venir firmados: créditos positivos para ventas y débitos negativos para compras. El margen de días y la tolerancia de importe son configurables. Si elegís una columna de descripción, las referencias de punto de venta y número ayudan a priorizar candidatos; los empates y posibles pagos parciales o agrupados quedan señalados para revisión y no se concilian automáticamente.
 
 ### Vencimientos
 
@@ -172,4 +175,4 @@ Este proyecto se distribuye bajo la licencia [MIT](LICENSE).
 
 ## Datos y privacidad
 
-No incluyas CUIT, razones sociales, comprobantes ni importes reales en el repositorio. Los archivos de `ejemplos/` y `datos_demo/` contienen datos sintéticos. Las bases SQLite y los reportes generados quedan excluidos por `.gitignore`.
+**Datos y privacidad:** este repositorio solo contiene datos sintéticos (`ejemplos/` y `datos_demo/`). Las bases SQLite y los informes generados están excluidos por `.gitignore`, por lo que no se suben datos de clientes.

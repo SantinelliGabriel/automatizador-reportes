@@ -1,6 +1,7 @@
 """Interfaz local en Streamlit para importaciones, conciliación y vencimientos."""
 
 import json
+import hashlib
 import os
 import tempfile
 from pathlib import Path
@@ -12,7 +13,7 @@ from automatizador.adaptadores import ejemplo_mapeo_holistor, _leer
 from automatizador.config import ARCHIVO_BD
 from automatizador.conciliacion import conciliar_banco, exportar_conciliacion
 from automatizador.database import crear_tabla, consultar_comprobantes
-from automatizador.procesamiento import procesar
+from automatizador.procesamiento import confirmar_previsualizacion, previsualizar, procesar
 from automatizador.vencimientos import cargar_calendario, proximos_vencimientos
 
 
@@ -73,6 +74,17 @@ def _guardar_subidos(archivos, carpeta):
     return rutas
 
 
+def _firma_importacion(archivos, periodo, operacion, fuente, base, mapeo):
+    """Detecta cambios en los archivos/opciones después de generar la vista previa."""
+    hashes = [(a.name, hashlib.sha256(a.getvalue()).hexdigest()) for a in (archivos or [])]
+    datos = json.dumps(
+        [hashes, periodo, operacion, fuente, str(base), mapeo],
+        ensure_ascii=False,
+        separators=(",", ":"),
+    )
+    return hashlib.sha256(datos.encode("utf-8")).hexdigest()
+
+
 def _mapeo_holistor():
     ejemplo = json.dumps(ejemplo_mapeo_holistor(), ensure_ascii=False, indent=2)
     texto = st.text_area("Mapeo JSON de Holistor (ajustá los encabezados a tu plantilla)", value=ejemplo, height=260)
@@ -96,7 +108,15 @@ if pagina == "Importar comprobantes":
     if fuente == "Plantilla Holistor":
         st.info("Holistor distribuye modelos según producto y versión. El adaptador acepta encabezados normalizados o este mapeo editable; para .prn se configuran además anchos y columnas.")
 
-    if st.button("Importar y generar reporte", type="primary", disabled=not archivos or (fuente == "Plantilla Holistor" and not mapeo_texto)):
+    firma = _firma_importacion(archivos, periodo, operacion, fuente, base, mapeo_texto)
+    plan_guardado = st.session_state.get("plan_importacion")
+    firma_confirmada = st.session_state.get("firma_confirmada")
+    if (
+        archivos
+        and (fuente != "Plantilla Holistor" or mapeo_texto)
+        and (plan_guardado is None or plan_guardado["firma"] != firma)
+        and firma_confirmada != firma
+    ):
         try:
             if len(periodo) != 7 or periodo[4] != "-" or not periodo.replace("-", "").isdigit() or not 1 <= int(periodo[5:]) <= 12:
                 raise ValueError("El período debe tener el formato AAAA-MM.")
@@ -106,13 +126,70 @@ if pagina == "Importar comprobantes":
                 if mapeo_texto:
                     mapping_path = Path(carpeta) / "mapeo_holistor.json"
                     mapping_path.write_text(mapeo_texto, encoding="utf-8")
-                salida = Path(carpeta) / "reporte.xlsx"
-                resultado = procesar(carpeta, salida, base, periodo, formatos[fuente], operacion, mapping_path)
-                st.success(f"Importación terminada: {resultado.filas_validas} filas válidas y {resultado.filas_observadas} observadas.")
-                st.write("Totales", resultado.totales)
-                st.download_button("Descargar reporte Excel", salida.read_bytes(), file_name=f"reporte_iva_{periodo}.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+                plan = previsualizar(carpeta, periodo, formatos[fuente], operacion, mapping_path)
+                st.session_state["plan_importacion"] = {"firma": firma, "plan": plan, "base": str(base)}
+                st.session_state.pop("resultado_importacion", None)
+                plan_guardado = st.session_state["plan_importacion"]
         except Exception as error:
             st.error(str(error))
+
+    if plan_guardado and plan_guardado["firma"] == firma:
+        plan = plan_guardado["plan"]
+        st.subheader("Vista previa: todavía no se modificó la base")
+        st.caption("La vista previa se recalcula al cambiar los archivos o las opciones. La base se actualiza solo después de confirmar.")
+        metrica = st.columns(3)
+        metrica[0].metric("Archivos", len(plan.archivos))
+        metrica[1].metric("Filas válidas", plan.filas_validas)
+        metrica[2].metric("Filas observadas", plan.filas_observadas)
+        st.dataframe(pd.DataFrame([{
+            "Cliente": archivo.cliente,
+            "Archivo": archivo.nombre,
+            "Válidos": len(archivo.comprobantes),
+            "Observados": len(archivo.observaciones),
+            "Se aplicará": "Sí" if archivo.aplicar else "No; conserva los datos actuales",
+        } for archivo in plan.archivos]), hide_index=True, width="stretch")
+        if plan.filas_validas:
+            filas_vista = pd.concat(
+                [a.comprobantes.assign(cliente=a.cliente) for a in plan.archivos if not a.comprobantes.empty],
+                ignore_index=True,
+            )
+            st.caption("Muestra de comprobantes que se importarían (hasta 100 filas).")
+            st.dataframe(filas_vista.head(100), hide_index=True, width="stretch")
+        if plan.filas_observadas:
+            with st.expander("Ver observaciones"):
+                st.dataframe(plan.observaciones, hide_index=True, width="stretch")
+        confirmar_click = st.button("Confirmar importación y generar reporte", type="primary")
+        if confirmar_click:
+            try:
+                with tempfile.TemporaryDirectory(prefix="reporte_iva_") as carpeta:
+                    salida = Path(carpeta) / f"reporte_iva_{periodo}.xlsx"
+                    resultado = confirmar_previsualizacion(plan, salida, Path(plan_guardado["base"]))
+                    st.session_state["resultado_importacion"] = {
+                        "periodo": periodo,
+                        "filas_validas": resultado.filas_validas,
+                        "filas_observadas": resultado.filas_observadas,
+                        "totales": resultado.totales,
+                        "reporte": salida.read_bytes(),
+                    }
+                    st.session_state["firma_confirmada"] = firma
+                st.session_state.pop("plan_importacion", None)
+                st.rerun()
+            except Exception as error:
+                st.error(f"No se confirmó la importación: {error}")
+
+    resultado_guardado = st.session_state.get("resultado_importacion")
+    if resultado_guardado and resultado_guardado["periodo"] == periodo:
+        st.success(
+            f"Importación terminada y confirmada: {resultado_guardado['filas_validas']} filas válidas y "
+            f"{resultado_guardado['filas_observadas']} observadas."
+        )
+        st.write("Totales", resultado_guardado["totales"])
+        st.download_button(
+            "Descargar reporte Excel",
+            resultado_guardado["reporte"],
+            file_name=f"reporte_iva_{periodo}.xlsx",
+            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        )
 
 
 elif pagina == "Conciliación bancaria":
@@ -134,7 +211,11 @@ elif pagina == "Conciliación bancaria":
                     descripcion_col = st.selectbox("Columna descripción (opcional)", ["(ninguna)"] + columnas)
                 margen_dias = st.number_input("Diferencia máxima de días", min_value=0, max_value=30, value=3)
                 margen_importe = st.number_input("Tolerancia de importe ($)", min_value=0.0, value=0.01, step=0.01)
-                st.caption("Se esperan créditos bancarios positivos para ventas y débitos negativos para compras.")
+                st.caption(
+                    "Se esperan créditos positivos para ventas y débitos negativos para compras. "
+                    "Las referencias del detalle se priorizan; los empates y posibles pagos agrupados "
+                    "se marcan para revisión y no se concilian automáticamente."
+                )
                 if st.button("Conciliar", type="primary"):
                     try:
                         crear_tabla(base)
@@ -145,8 +226,14 @@ elif pagina == "Conciliación bancaria":
                         salida = Path(carpeta) / f"conciliacion_{periodo}.xlsx"
                         exportar_conciliacion(salida, banco, docs)
                         conciliados = int((banco["Estado"] == "Conciliado").sum())
-                        st.metric("Movimientos conciliados", conciliados)
+                        ambiguos = int(banco["Estado"].str.contains("ambigua|revisar", case=False, regex=True).sum())
+                        metricas = st.columns(3)
+                        metricas[0].metric("Movimientos conciliados", conciliados)
+                        metricas[1].metric("Para revisar", ambiguos)
+                        metricas[2].metric("Sin coincidencia", int((banco["Estado"] == "Sin coincidencia").sum()))
                         st.dataframe(banco, use_container_width=True)
+                        with st.expander("Estado de los comprobantes"):
+                            st.dataframe(docs, use_container_width=True)
                         st.download_button("Descargar conciliación", salida.read_bytes(), file_name=salida.name, mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
                     except Exception as error:
                         st.error(str(error))

@@ -1,6 +1,7 @@
 """Normalización y validación de comprobantes contables."""
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+import json
 import re
 import unicodedata
 
@@ -21,6 +22,7 @@ ALIAS = {
     "razon_social": {"razon_social", "cliente", "proveedor", "nombre_fiscal"},
     "neto_gravado": {"neto_gravado", "neto", "importe_neto"},
     "alicuota": {"alicuota", "alicuota_iva", "tasa_iva", "iva_pct"},
+    "detalle_alicuotas": {"detalle_alicuotas", "detalle_iva", "alicuotas_iva"},
     "iva": {"iva", "importe_iva", "iva_debito_credito"},
     "no_gravado_exento": {"no_gravado_exento", "no_gravado", "exento"},
     "percepciones": {"percepciones", "otros_impuestos", "percepciones_otros"},
@@ -80,6 +82,39 @@ def _importe(valor):
     return importe
 
 
+def _leer_detalle_alicuotas(valor):
+    """Normaliza el desglose de IVA y valida importes/rates por línea."""
+    if valor is None:
+        return None
+    if isinstance(valor, (list, tuple, dict)) and not valor:
+        return None
+    if isinstance(valor, str):
+        if not valor.strip():
+            return None
+        valor = json.loads(valor)
+    elif not isinstance(valor, (list, tuple, dict)) and pd.isna(valor):
+        return None
+    if isinstance(valor, dict):
+        valor = [valor]
+    if not isinstance(valor, (list, tuple)) or not valor:
+        raise ValueError("El detalle de alícuotas debe ser una lista no vacía.")
+
+    detalle = []
+    for linea in valor:
+        if not isinstance(linea, dict):
+            raise ValueError("Cada línea del detalle de alícuotas debe ser un objeto.")
+        tasa = Decimal(str(linea.get("alicuota", linea.get("tasa"))).replace("%", "").replace(",", "."))
+        if tasa not in ALICUOTAS_VALIDAS:
+            raise ValueError(f"Alícuota inválida en el detalle: {tasa}.")
+        neto = _importe(linea.get("neto_gravado", linea.get("neto", 0)))
+        iva = _importe(linea.get("iva", 0))
+        esperado = (neto * tasa / Decimal("100")).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+        if abs(esperado - iva) > CENTAVOS:
+            raise ValueError(f"El IVA de la alícuota {tasa}% no coincide con su neto.")
+        detalle.append({"alicuota": tasa, "neto_gravado": neto, "iva": iva})
+    return detalle
+
+
 def validar_comprobantes(df, periodo):
     """Devuelve (aceptados, rechazados) con validación aislada por fila."""
     df = normalizar_columnas(df.copy())
@@ -135,14 +170,23 @@ def validar_comprobantes(df, periodo):
         if not registro["razon_social"] or registro["razon_social"].casefold() == "nan":
             motivos.append("Razón social vacía.")
 
+        detalle = None
         try:
-            alicuota = Decimal(str(fila["alicuota"]).replace("%", "").replace(",", "."))
-            if alicuota not in ALICUOTAS_VALIDAS:
-                motivos.append("Alícuota inválida; use 0, 2,5, 5, 10,5, 21 o 27.")
+            detalle = _leer_detalle_alicuotas(fila.get("detalle_alicuotas"))
+        except (InvalidOperation, ValueError, TypeError, json.JSONDecodeError) as error:
+            motivos.append(f"Detalle de alícuotas inválido: {error}")
+        if detalle:
+            alicuota = detalle[0]["alicuota"] if len(detalle) == 1 else Decimal("0")
             registro["alicuota"] = float(alicuota)
-        except (InvalidOperation, ValueError, TypeError):
-            motivos.append("Alícuota inválida.")
-            alicuota = Decimal("0")
+        else:
+            try:
+                alicuota = Decimal(str(fila["alicuota"]).replace("%", "").replace(",", "."))
+                if alicuota not in ALICUOTAS_VALIDAS:
+                    motivos.append("Alícuota inválida; use 0, 2,5, 5, 10,5, 21 o 27.")
+                registro["alicuota"] = float(alicuota)
+            except (InvalidOperation, ValueError, TypeError):
+                motivos.append("Alícuota inválida.")
+                alicuota = Decimal("0")
 
         columnas_importes = ("neto_gravado", "iva", "no_gravado_exento", "percepciones", "total")
         for col in columnas_importes:
@@ -151,6 +195,14 @@ def validar_comprobantes(df, periodo):
             except (InvalidOperation, ValueError, TypeError):
                 motivos.append(f"Importe inválido en '{col}'.")
                 registro[col] = Decimal("0")
+
+        if detalle:
+            neto_detalle = sum((linea["neto_gravado"] for linea in detalle), Decimal("0"))
+            iva_detalle = sum((linea["iva"] for linea in detalle), Decimal("0"))
+            if abs(neto_detalle - registro["neto_gravado"]) > CENTAVOS:
+                motivos.append("El neto por alícuota no coincide con el neto gravado del comprobante.")
+            if abs(iva_detalle - registro["iva"]) > CENTAVOS:
+                motivos.append("El IVA por alícuota no coincide con el IVA total del comprobante.")
 
         moneda = fila.get("moneda", "ARS")
         moneda = "ARS" if pd.isna(moneda) or not str(moneda).strip() else str(moneda).strip().upper()
@@ -182,16 +234,32 @@ def validar_comprobantes(df, periodo):
         registro["tipo_cambio"] = float(tipo_cambio) if tipo_cambio is not None else None
 
         if all(isinstance(registro[c], Decimal) for c in columnas_importes):
-            esperado = registro["neto_gravado"] * alicuota / Decimal("100")
-            if abs(esperado.quantize(CENTAVOS, rounding=ROUND_HALF_UP) - registro["iva"]) > CENTAVOS:
-                motivos.append("El IVA no coincide con neto gravado por alícuota (tolerancia de $0,01).")
+            if not detalle:
+                esperado = registro["neto_gravado"] * alicuota / Decimal("100")
+                if abs(esperado.quantize(CENTAVOS, rounding=ROUND_HALF_UP) - registro["iva"]) > CENTAVOS:
+                    motivos.append("El IVA no coincide con neto gravado por alícuota (tolerancia de $0,01).")
             suma = sum((registro[c] for c in ("neto_gravado", "iva", "no_gravado_exento", "percepciones")), Decimal("0"))
             if abs(suma - registro["total"]) > CENTAVOS:
                 motivos.append("Neto, IVA, no gravado/exento y percepciones no coinciden con el total.")
 
+        if not detalle:
+            detalle = [{
+                "alicuota": alicuota,
+                "neto_gravado": registro["neto_gravado"],
+                "iva": registro["iva"],
+            }]
+        for linea in detalle:
+            linea["neto_gravado_origen"] = linea["neto_gravado"]
+            linea["iva_origen"] = linea["iva"]
         if moneda != "ARS" and tipo_cambio is not None:
             for col in columnas_importes:
                 registro[col] = (registro[f"{col}_origen"] * tipo_cambio).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+            for linea in detalle:
+                linea["neto_gravado"] = (linea["neto_gravado"] * tipo_cambio).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+                linea["iva"] = (linea["iva"] * tipo_cambio).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+        registro["detalle_alicuotas"] = [{
+            clave: float(valor) for clave, valor in linea.items()
+        } for linea in detalle]
 
         operacion = str(fila["operacion"]).strip().casefold()
         if operacion not in {"ventas", "compras"}:

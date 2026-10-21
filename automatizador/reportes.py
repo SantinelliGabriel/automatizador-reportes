@@ -1,5 +1,7 @@
 """Construye el libro consolidado de comprobantes y observaciones."""
 
+import json
+
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
@@ -20,6 +22,12 @@ def construir_hojas(comprobantes):
         return detalle, resumen_cliente, resumen_alicuota
 
     detalle = comprobantes.copy()
+    if "detalle_alicuotas" in detalle:
+        varias = detalle["detalle_alicuotas"].map(lambda partidas: isinstance(partidas, (list, tuple)) and len(partidas) > 1)
+        # pandas 3 rejects assigning text into a float column, so make the
+        # display column capable of holding both a rate and the label.
+        detalle["alicuota"] = detalle["alicuota"].astype(object)
+        detalle.loc[varias, "alicuota"] = "Varias"
     # NC reducen débito/crédito; ND y facturas suman. Se conserva el importe original en el detalle.
     detalle["factor"] = detalle["tipo_comprobante"].str.startswith("NC").map({True: -1, False: 1})
     detalle["neto_impacto"] = detalle["neto_gravado"] * detalle["factor"]
@@ -29,11 +37,67 @@ def construir_hojas(comprobantes):
         comprobantes=("numero", "count"), neto_gravado=("neto_impacto", "sum"),
         iva=("iva_impacto", "sum"), total=("total_impacto", "sum"),
     )
-    resumen_alicuota = detalle.groupby(["operacion", "alicuota"], as_index=False).agg(
-        neto_gravado=("neto_impacto", "sum"), iva=("iva_impacto", "sum"),
-    )
+    filas_alicuota = []
+    for _, comprobante in detalle.iterrows():
+        partidas = comprobante.get("detalle_alicuotas")
+        if not isinstance(partidas, (list, tuple)) or not partidas:
+            partidas = [{
+                "alicuota": comprobante["alicuota"],
+                "neto_gravado": comprobante["neto_gravado"],
+                "iva": comprobante["iva"],
+            }]
+        for partida in partidas:
+            filas_alicuota.append({
+                "operacion": comprobante["operacion"],
+                "alicuota": float(partida["alicuota"]),
+                "neto_gravado": float(partida["neto_gravado"]) * comprobante["factor"],
+                "iva": float(partida["iva"]) * comprobante["factor"],
+            })
+    resumen_alicuota = pd.DataFrame(filas_alicuota).groupby(
+        ["operacion", "alicuota"], as_index=False
+    ).agg(neto_gravado=("neto_gravado", "sum"), iva=("iva", "sum"))
+    if "detalle_alicuotas" in detalle:
+        detalle["detalle_alicuotas"] = detalle["detalle_alicuotas"].map(
+            lambda partidas: json.dumps(partidas, ensure_ascii=False) if isinstance(partidas, (list, tuple)) else "[]"
+        )
     detalle = detalle.drop(columns=["factor", "neto_impacto", "iva_impacto", "total_impacto"])
     return detalle, resumen_cliente, resumen_alicuota
+
+
+def construir_detalle_alicuotas(comprobantes):
+    """Desglosa cada comprobante en filas por tasa de IVA para revisión."""
+    columnas = [
+        "cliente", "periodo", "operacion", "fecha", "tipo_comprobante",
+        "punto_venta", "numero", "cuit", "alicuota", "neto_gravado",
+        "iva", "moneda", "tipo_cambio",
+    ]
+    filas = []
+    for comprobante in comprobantes.to_dict("records"):
+        partidas = comprobante.get("detalle_alicuotas")
+        if not isinstance(partidas, (list, tuple)) or not partidas:
+            partidas = [{
+                "alicuota": comprobante.get("alicuota", 0),
+                "neto_gravado": comprobante["neto_gravado"],
+                "iva": comprobante["iva"],
+            }]
+        factor = -1 if str(comprobante["tipo_comprobante"]).startswith("NC") else 1
+        for partida in partidas:
+            filas.append({
+                "cliente": comprobante["cliente"],
+                "periodo": comprobante["periodo"],
+                "operacion": comprobante["operacion"],
+                "fecha": comprobante["fecha"],
+                "tipo_comprobante": comprobante["tipo_comprobante"],
+                "punto_venta": comprobante["punto_venta"],
+                "numero": comprobante["numero"],
+                "cuit": comprobante["cuit"],
+                "alicuota": partida["alicuota"],
+                "neto_gravado": float(partida["neto_gravado"]) * factor,
+                "iva": float(partida["iva"]) * factor,
+                "moneda": comprobante.get("moneda", "ARS"),
+                "tipo_cambio": comprobante.get("tipo_cambio", 1),
+            })
+    return pd.DataFrame(filas, columns=columnas)
 
 
 def aplicar_formato_excel(ruta_archivo):
