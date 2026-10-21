@@ -1,4 +1,5 @@
 import pandas as pd
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 
 COLUMNAS_REQUERIDAS = [
     "producto",
@@ -9,6 +10,7 @@ COLUMNAS_REQUERIDAS = [
 
 def validar_ventas(ventas):
     """Comprueba que los datos de ventas sean válidos."""
+    ventas = ventas.copy()
 
     if ventas.empty:
         raise ValueError("El Excel no contiene ventas para procesar.")
@@ -60,16 +62,34 @@ def validar_ventas(ventas):
     if (ventas["precio_unitario"] < 0).any():
         raise ValueError("Los precios no pueden ser negativos.")
 
-    subtotales = ventas["unidades"] * ventas["precio_unitario"]
-
-    if not subtotales.map(
-        lambda valor: pd.notna(valor) and abs(valor) != float("inf")
-    ).all():
-        raise ValueError("El importe calculado por producto no es válido.")
-
     if (ventas["unidades"] > 2**63 - 1).any():
         raise ValueError(
             "Las unidades están fuera del rango permitido por SQLite."
         )
+
+    centavos = []
+    try:
+        for precio in ventas["precio_unitario"]:
+            decimal = Decimal(str(precio))
+            centavos.append(
+                int((decimal * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+            )
+    except (InvalidOperation, ValueError, OverflowError) as error:
+        raise ValueError("Hay precios que no se pueden representar en centavos.") from error
+
+    ventas["precio_unitario_centavos"] = centavos
+    ventas["precio_unitario"] = [importe / 100 for importe in centavos]
+    unidades_enteras = [int(unidad) for unidad in ventas["unidades"]]
+    ventas["unidades"] = unidades_enteras
+
+    limite_sqlite = 2**63 - 1
+    importes_centavos = [
+        unidades * precio
+        for unidades, precio in zip(unidades_enteras, centavos)
+    ]
+    if any(importe > limite_sqlite for importe in importes_centavos):
+        raise ValueError("El importe calculado por producto no es válido.")
+    if sum(importes_centavos) > limite_sqlite:
+        raise ValueError("El total de ventas está fuera del rango permitido.")
 
     return ventas

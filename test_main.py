@@ -1,4 +1,5 @@
 import tempfile
+import sqlite3
 import unittest
 from pathlib import Path
 from unittest.mock import patch
@@ -44,6 +45,16 @@ class TestValidacionesVentas(unittest.TestCase):
 
         self.assertEqual(resultado.loc[0, "precio_unitario"], 0)
 
+    def test_redondea_precio_a_centavos(self):
+        ventas = self.ventas.copy()
+        ventas["precio_unitario"] = ventas["precio_unitario"].astype(float)
+        ventas.loc[0, "precio_unitario"] = 1.005
+
+        resultado = validar_ventas(ventas)
+
+        self.assertEqual(resultado.loc[0, "precio_unitario_centavos"], 101)
+        self.assertEqual(resultado.loc[0, "precio_unitario"], 1.01)
+
     def setUp(self):
         # Datos correctos para reutilizar en las pruebas
         self.ventas = pd.DataFrame({
@@ -88,6 +99,15 @@ class TestValidacionesVentas(unittest.TestCase):
 
         self.assertEqual(resultado.loc[0, "producto"], "Teclado")
 
+    def test_no_modifica_el_dataframe_original(self):
+        ventas = self.ventas.copy()
+        ventas.loc[0, "producto"] = "  Teclado  "
+
+        validar_ventas(ventas)
+
+        self.assertEqual(ventas.loc[0, "producto"], "  Teclado  ")
+        self.assertNotIn("precio_unitario_centavos", ventas.columns)
+
     def test_rechaza_precio_infinito(self):
         ventas = self.ventas.copy()
         ventas["precio_unitario"] = ventas["precio_unitario"].astype(float)
@@ -108,8 +128,8 @@ class TestValidacionesVentas(unittest.TestCase):
         ventas["unidades"] = ventas["unidades"].astype(float)
         ventas["precio_unitario"] = ventas["precio_unitario"].astype(float)
 
-        ventas.loc[0, "unidades"] = 1e308
-        ventas.loc[0, "precio_unitario"] = 1e308
+        ventas.loc[0, "unidades"] = 1e9
+        ventas.loc[0, "precio_unitario"] = 1e10
 
         with self.assertRaisesRegex(
             ValueError,
@@ -177,8 +197,8 @@ class TestBaseDeDatos(unittest.TestCase):
         self.assertEqual(resultado["total"].tolist(), [60000, 60000])
 
 
-    def test_guardar_dos_veces_no_duplica_ventas(self):
-        """Comprueba que guardar dos veces no genere duplicados."""
+    def test_guardar_dos_veces_reemplaza_las_ventas(self):
+        """Comprueba que una nueva importación sustituya la anterior."""
         ventas = pd.DataFrame({
             "producto": ["Teclado", "Mouse"],
             "unidades": [5, 8],
@@ -186,12 +206,17 @@ class TestBaseDeDatos(unittest.TestCase):
         })
 
         database.guardar_ventas(ventas)
-        database.guardar_ventas(ventas)
+        nuevas_ventas = pd.DataFrame({
+            "producto": ["Monitor"],
+            "unidades": [2],
+            "precio_unitario": [150000],
+        })
+        database.guardar_ventas(nuevas_ventas)
 
         resultado = database.consultar_ventas()
 
-        self.assertEqual(len(resultado), 2)
-        self.assertEqual(resultado["producto"].tolist(), ["Teclado", "Mouse"])
+        self.assertEqual(len(resultado), 1)
+        self.assertEqual(resultado["producto"].tolist(), ["Monitor"])
 
 
     def test_base_de_datos_inicialmente_vacia(self):
@@ -201,7 +226,10 @@ class TestBaseDeDatos(unittest.TestCase):
         self.assertTrue(resultado.empty)
         self.assertEqual(
             list(resultado.columns),
-            ["producto", "unidades", "precio_unitario", "total"],
+            [
+                "producto", "unidades", "precio_unitario",
+                "total_centavos", "total",
+            ],
         )
 
 
@@ -291,58 +319,26 @@ class TestBaseDeDatos(unittest.TestCase):
         )
         self.assertEqual(len(resultado), 2)
 
-    def test_rollback_restaura_ventas_tras_error_de_insercion(self):
-        """Comprueba que rollback restaure los datos anteriores."""
-        ventas_originales = pd.DataFrame({
-            "producto": ["Teclado", "Mouse"],
-            "unidades": [5, 8],
-            "precio_unitario": [12000, 7500],
+    def test_rollback_si_falla_la_publicacion_del_reporte(self):
+        """Una falla al publicar el reporte conserva las ventas anteriores."""
+        originales = pd.DataFrame({
+            "producto": ["Teclado"], "unidades": [5], "precio_unitario": [12000],
         })
-
-        ventas_nuevas = pd.DataFrame({
-            "producto": ["Monitor"],
-            "unidades": [2],
-            "precio_unitario": [150000],
+        nuevas = pd.DataFrame({
+            "producto": ["Monitor"], "unidades": [2], "precio_unitario": [150000],
         })
+        database.guardar_ventas(originales)
 
-        database.guardar_ventas(ventas_originales)
+        def fallar_publicacion():
+            raise RuntimeError("falló publicación")
 
-        conexion_original = database.conectar_bd
-
-        def conectar_con_error():
-            conexion = conexion_original()
-
-            conexion.execute(
-                """
-                CREATE TRIGGER provocar_error
-                BEFORE INSERT ON ventas
-                BEGIN
-                    SELECT RAISE(ABORT, 'Error de inserción simulado');
-                END
-                """
+        with self.assertRaisesRegex(RuntimeError, "falló publicación"):
+            database.guardar_ventas(
+                nuevas, antes_de_commit=lambda _ventas: fallar_publicacion()
             )
 
-            conexion.commit()
-            return conexion
-
-        with patch.object(
-            database,
-            "conectar_bd",
-            side_effect=conectar_con_error,
-        ):
-            with self.assertRaisesRegex(
-                Exception,
-                "Error de inserción simulado",
-            ):
-                database.guardar_ventas(ventas_nuevas)
-
         resultado = database.consultar_ventas()
-
-        self.assertEqual(
-            resultado["producto"].tolist(),
-            ["Teclado", "Mouse"],
-        )
-        self.assertEqual(len(resultado), 2)
+        self.assertEqual(resultado["producto"].tolist(), ["Teclado"])
 
     def test_calcula_subtotales_correctamente(self):
         """Comprueba que SQL calcule los importes de cada venta."""
@@ -357,6 +353,32 @@ class TestBaseDeDatos(unittest.TestCase):
 
         self.assertEqual(resultado["total"].tolist(), [60000, 60000])
         self.assertEqual(resultado["total"].sum(), 120000)
+
+    def test_migra_base_existente_a_centavos(self):
+        with tempfile.TemporaryDirectory() as carpeta:
+            ruta = Path(carpeta) / "legacy.db"
+            conexion = sqlite3.connect(ruta)
+            conexion.execute(
+                """CREATE TABLE ventas (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    producto TEXT NOT NULL,
+                    unidades INTEGER NOT NULL,
+                    precio_unitario REAL NOT NULL
+                )"""
+            )
+            conexion.execute(
+                "INSERT INTO ventas (producto, unidades, precio_unitario) VALUES (?, ?, ?)",
+                ("Adaptador", 2, 10.15),
+            )
+            conexion.commit()
+            conexion.close()
+
+            database.crear_tabla(ruta)
+            resultado = database.consultar_ventas(ruta)
+
+            self.assertEqual(resultado.loc[0, "precio_unitario"], 10.15)
+            self.assertEqual(resultado.loc[0, "total_centavos"], 2030)
+            self.assertEqual(resultado.loc[0, "total"], 20.3)
 
 class TestReportes(unittest.TestCase):
 
@@ -520,5 +542,27 @@ class TestReportes(unittest.TestCase):
             self.assertEqual(reporte.iloc[-1]["producto"], "TOTAL GENERAL")
             self.assertEqual(reporte.iloc[-1]["unidades"], 5)
             self.assertEqual(reporte.iloc[-1]["total"], 35000.0)
+
+
+class TestConsola(unittest.TestCase):
+
+    def test_main_pasa_las_rutas_configuradas(self):
+        with patch.object(main, "generar_reporte") as generar:
+            codigo = main.main([
+                "--input", "entrada.xlsx",
+                "--output", "salida.xlsx",
+                "--database", "ventas.db",
+            ])
+
+        self.assertEqual(codigo, 0)
+        generar.assert_called_once_with(
+            Path("entrada.xlsx"), Path("salida.xlsx"), Path("ventas.db")
+        )
+
+    def test_main_devuelve_error_si_falla_el_proceso(self):
+        with patch.object(main, "generar_reporte", side_effect=RuntimeError("fallo")):
+            codigo = main.main([])
+
+        self.assertEqual(codigo, 1)
 if __name__ == "__main__":
     unittest.main(verbosity=2)

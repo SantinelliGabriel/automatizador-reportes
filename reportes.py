@@ -2,6 +2,26 @@
 from openpyxl import load_workbook
 from openpyxl.styles import Font, PatternFill, Border, Side, Alignment
 from openpyxl.utils import get_column_letter
+import pandas as pd
+
+
+def construir_reporte(ventas):
+    """Devuelve las ventas con su fila de total y el importe general."""
+    total_centavos = sum(int(valor) for valor in ventas["total_centavos"])
+    total_ventas = total_centavos / 100
+    ventas_reporte = ventas[
+        ["producto", "unidades", "precio_unitario", "total"]
+    ].copy()
+    fila_total = {
+        "producto": "TOTAL GENERAL",
+        "unidades": sum(int(valor) for valor in ventas["unidades"]),
+        "precio_unitario": None,
+        "total": total_ventas,
+    }
+    return (
+        pd.concat([ventas_reporte, pd.DataFrame([fila_total])], ignore_index=True),
+        total_ventas,
+    )
 
 
 def aplicar_formato_excel(ruta_archivo):
