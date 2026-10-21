@@ -2,6 +2,7 @@
 
 import logging
 from dataclasses import dataclass
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
@@ -10,6 +11,7 @@ from automatizador.adaptadores import leer_comprobantes
 from automatizador.database import (
     crear_tabla,
     consultar_comprobantes,
+    consultar_totales,
     reemplazar_periodos,
 )
 from automatizador.reportes import (
@@ -57,7 +59,7 @@ class ResultadoProcesamiento:
     errores: pd.DataFrame
     filas_validas: int
     filas_observadas: int
-    totales: dict[str, float]
+    totales: dict[str, Decimal]
 
 
 def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mapping_path=None):
@@ -151,10 +153,7 @@ def confirmar_previsualizacion(previsualizacion, salida, base):
     aplicar_formato_excel(salida)
     logging.info("Período %s: reporte guardado en %s", previsualizacion.periodo, salida)
     logging.info("Observaciones: %s", len(observaciones))
-    totales = {
-        columna: float(resumen_cliente[columna].sum()) if columna in resumen_cliente else 0.0
-        for columna in ("neto_gravado", "iva", "total")
-    }
+    totales = consultar_totales(base, previsualizacion.periodo)
     return ResultadoProcesamiento(
         salida=salida,
         comprobantes=comprobantes,

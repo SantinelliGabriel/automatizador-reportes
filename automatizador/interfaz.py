@@ -183,7 +183,9 @@ if pagina == "Importar comprobantes":
             f"Importación terminada y confirmada: {resultado_guardado['filas_validas']} filas válidas y "
             f"{resultado_guardado['filas_observadas']} observadas."
         )
-        st.write("Totales", resultado_guardado["totales"])
+        st.write("Totales (ARS)", {
+            columna: f"${importe:,.2f}" for columna, importe in resultado_guardado["totales"].items()
+        })
         st.download_button(
             "Descargar reporte Excel",
             resultado_guardado["reporte"],

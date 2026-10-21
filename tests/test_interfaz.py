@@ -1,3 +1,4 @@
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,6 +40,9 @@ class TestInterfaz(unittest.TestCase):
             )
             self.assertTrue(base.exists())
             self.assertGreaterEqual(len(app.download_button), 1)
+            self.assertEqual(json.loads(app.json[0].value), {
+                "neto_gravado": "$150,000.00", "iva": "$26,250.00", "total": "$176,250.00",
+            })
 
     def test_modo_demo_no_expone_carga_de_archivos(self):
         app = app_test(ROOT / "demo.py")
@@ -49,6 +53,9 @@ class TestInterfaz(unittest.TestCase):
         self.assertEqual(len(app.radio), 0)
         self.assertGreaterEqual(len(app.download_button), 1)
         self.assertTrue(any("datos ficticios" in item.value for item in app.caption))
+        self.assertEqual([metrica.value for metrica in app.metric], [
+            "2", "$150,000.00", "$26,250.00", "$176,250.00",
+        ])
 
 
 if __name__ == "__main__":

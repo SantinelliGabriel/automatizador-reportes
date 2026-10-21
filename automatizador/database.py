@@ -197,6 +197,27 @@ def consultar_comprobantes(ruta=None, periodo=None):
         conexion.close()
 
 
+def consultar_totales(ruta=None, periodo=None) -> dict[str, Decimal]:
+    """Suma centavos persistidos y devuelve pesos exactos; las NC restan."""
+    columnas = ("neto_gravado", "iva", "total")
+    sumas = [
+        f"COALESCE(SUM(CASE WHEN tipo_comprobante LIKE 'NC%' "
+        f"THEN -{columna}_centavos ELSE {columna}_centavos END), 0)"
+        for columna in columnas
+    ]
+    consulta = "SELECT " + ", ".join(sumas) + " FROM comprobantes"
+    params = ()
+    if periodo:
+        consulta += " WHERE periodo = ?"
+        params = (periodo,)
+    conexion = conectar_bd(ruta)
+    try:
+        centavos = conexion.execute(consulta, params).fetchone()
+        return {columna: Decimal(importe).scaleb(-2) for columna, importe in zip(columnas, centavos)}
+    finally:
+        conexion.close()
+
+
 def consultar_importaciones(ruta=None):
     conexion = conectar_bd(ruta)
     try:

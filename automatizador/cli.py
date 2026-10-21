@@ -33,7 +33,8 @@ def main(argv=None):
         if not args.period or len(args.period) != 7 or args.period[4] != "-" or not args.period.replace("-", "").isdigit() or not 1 <= int(args.period[5:]) <= 12:
             parser.error("--period es obligatorio y debe usar AAAA-MM con mes entre 01 y 12.")
         resultado = procesar(args.input, args.output, args.database, args.period, args.source, args.operation, args.mapping)
-        logging.info("Filas válidas: %s; observadas: %s; totales: %s", resultado.filas_validas, resultado.filas_observadas, resultado.totales)
+        totales = ", ".join(f"{columna}={importe:.2f}" for columna, importe in resultado.totales.items())
+        logging.info("Filas válidas: %s; observadas: %s; totales: %s", resultado.filas_validas, resultado.filas_observadas, totales)
     except (FileNotFoundError, ValueError, RuntimeError, sqlite3.Error, OSError) as error:
         logging.error("%s", error)
         return 1

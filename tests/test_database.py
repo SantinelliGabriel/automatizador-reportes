@@ -1,10 +1,11 @@
 import sqlite3
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
 
-from automatizador.database import crear_tabla, consultar_comprobantes, reemplazar_periodo
+from automatizador.database import crear_tabla, consultar_comprobantes, consultar_totales, reemplazar_periodo
 from automatizador.validaciones import validar_comprobantes
 from tests.helpers import comprobante, directorio_temporal
 
@@ -54,3 +55,39 @@ class TestPersistencia(unittest.TestCase):
         self.assertEqual(guardado["neto_gravado_origen"], 100)
         self.assertEqual(guardado["total"], 121000)
         self.assertEqual(guardado["total_origen"], 121)
+
+    def test_totales_sin_comprobantes_devuelven_cero_decimal(self):
+        totales = consultar_totales(self.db, "2026-09")
+
+        self.assertEqual(totales, dict.fromkeys(("neto_gravado", "iva", "total"), Decimal("0.00")))
+        for importe in totales.values():
+            self.assertIsInstance(importe, Decimal)
+            self.assertEqual(importe.as_tuple().exponent, -2)
+
+    def test_totales_conservan_centavos_que_float_no_puede_representar(self):
+        importe = "90071992547409.93"
+        self.importar("2026-09", comprobante(neto_gravado=importe, alicuota=0, iva=0, total=importe))
+
+        self.assertEqual(consultar_totales(self.db, "2026-09"), {
+            "neto_gravado": Decimal(importe), "iva": Decimal("0.00"), "total": Decimal(importe),
+        })
+
+    def test_totales_filtran_periodo_y_aplican_signos_de_notas_en_ventas_y_compras(self):
+        registros = [
+            comprobante(numero=1, neto_gravado="0.10", iva="0.02", total="0.12"),
+            comprobante(numero=2, operacion="compras", neto_gravado="0.20", iva="0.04", total="0.24"),
+            comprobante(numero=3, tipo_comprobante="NC A", neto_gravado="0.40", iva="0.08", total="0.48"),
+            comprobante(numero=4, tipo_comprobante="ND A", operacion="compras",
+                        neto_gravado="0.05", iva="0.01", total="0.06"),
+        ]
+        buenos, malos = validar_comprobantes(pd.DataFrame(registros), "2026-09")
+        self.assertTrue(malos.empty)
+        reemplazar_periodo("Cliente Demo", "2026-09", buenos, malos, "demo.csv", self.db)
+        self.importar("2026-10", comprobante(fecha="2026-10-03"))
+
+        self.assertEqual(consultar_totales(self.db, "2026-09"), {
+            "neto_gravado": Decimal("-0.05"), "iva": Decimal("-0.01"), "total": Decimal("-0.06"),
+        })
+        self.assertEqual(consultar_totales(self.db), {
+            "neto_gravado": Decimal("99999.95"), "iva": Decimal("20999.99"), "total": Decimal("120999.94"),
+        })
