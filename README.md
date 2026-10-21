@@ -125,6 +125,8 @@ La aplicación guarda los datos localmente en la base SQLite indicada.
 
 El entrypoint `demo.py` muestra automáticamente los datos ficticios de `ejemplos/Cliente Demo Norte.xlsx`, permite descargar el informe y no presenta cargadores de archivos. Para probarlo localmente:
 
+**Demo en vivo:** [automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/)
+
 ```powershell
 streamlit run demo.py
 ```
