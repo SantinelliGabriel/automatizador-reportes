@@ -12,6 +12,8 @@ def construir_hojas(comprobantes):
             "cliente", "periodo", "operacion", "fecha", "tipo_comprobante",
             "punto_venta", "numero", "cuit", "razon_social", "neto_gravado",
             "alicuota", "iva", "no_gravado_exento", "percepciones", "total",
+            "moneda", "tipo_cambio", "neto_gravado_origen", "iva_origen",
+            "no_gravado_exento_origen", "percepciones_origen", "total_origen",
         ])
         resumen_cliente = pd.DataFrame(columns=["cliente", "operacion", "comprobantes", "neto_gravado", "iva", "total"])
         resumen_alicuota = pd.DataFrame(columns=["operacion", "alicuota", "neto_gravado", "iva"])

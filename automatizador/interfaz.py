@@ -1,6 +1,7 @@
 """Interfaz local en Streamlit para importaciones, conciliación y vencimientos."""
 
 import json
+import os
 import tempfile
 from pathlib import Path
 
@@ -17,7 +18,46 @@ from automatizador.vencimientos import cargar_calendario, proximos_vencimientos
 
 st.set_page_config(page_title="Comprobantes e IVA", page_icon="📑", layout="wide")
 st.title("Comprobantes e informes de IVA")
-st.caption("Herramienta local de revisión. Los archivos se procesan en esta computadora.")
+modo_demo = os.getenv("AUTOMATIZADOR_DEMO") == "1"
+st.caption(
+    "Modo demo: se muestran datos ficticios; la carga de archivos está deshabilitada."
+    if modo_demo else "Herramienta local de revisión. Los archivos se procesan en esta computadora."
+)
+
+if modo_demo:
+    st.subheader("Demostración con comprobantes sintéticos")
+    st.info("Esta vista usa únicamente el archivo de ejemplo incluido en el repositorio. No acepta archivos ni datos ingresados por visitantes.")
+    ejemplo = Path(__file__).resolve().parents[1] / "ejemplos" / "Cliente Demo Norte.xlsx"
+    demo_db = Path(tempfile.gettempdir()) / "automatizador_demo.db"
+    if "demo_resultado" not in st.session_state:
+        with tempfile.TemporaryDirectory(prefix="demo_iva_") as carpeta:
+            resultado = procesar(ejemplo, Path(carpeta) / "reporte.xlsx", demo_db, "2026-09")
+            st.session_state["demo_resultado"] = resultado.comprobantes
+            st.session_state["demo_totales"] = resultado.totales
+            st.session_state["demo_reporte"] = (Path(carpeta) / "reporte.xlsx").read_bytes()
+    st.caption("Período de muestra: septiembre de 2026. Importes consolidados en pesos argentinos.")
+    metricas = st.columns(4)
+    metricas[0].metric("Comprobantes", len(st.session_state["demo_resultado"]))
+    for indice, (columna, etiqueta) in enumerate(
+        (("neto_gravado", "Neto gravado"), ("iva", "IVA"), ("total", "Total")), start=1
+    ):
+        metricas[indice].metric(
+            f"{etiqueta} (ARS)", f"${st.session_state['demo_totales'][columna]:,.2f}"
+        )
+    columnas_demo = ["cliente", "operacion", "fecha", "tipo_comprobante", "numero", "total"]
+    st.dataframe(
+        st.session_state["demo_resultado"][columnas_demo],
+        hide_index=True,
+        width="stretch",
+        column_config={"total": st.column_config.NumberColumn("Total (ARS)", format="$%.2f")},
+    )
+    st.download_button(
+        "Descargar reporte ficticio",
+        st.session_state["demo_reporte"],
+        file_name="reporte_iva_demo.xlsx",
+        mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+    )
+    st.stop()
 
 pagina = st.sidebar.radio("Módulo", ["Importar comprobantes", "Conciliación bancaria", "Vencimientos"])
 base = Path(st.sidebar.text_input("Base SQLite", str(ARCHIVO_BD)))

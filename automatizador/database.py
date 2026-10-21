@@ -39,8 +39,36 @@ def crear_tabla(ruta=None):
             neto_gravado_centavos INTEGER NOT NULL, alicuota REAL NOT NULL,
             iva_centavos INTEGER NOT NULL, no_gravado_exento_centavos INTEGER NOT NULL,
             percepciones_centavos INTEGER NOT NULL, total_centavos INTEGER NOT NULL,
+            moneda TEXT NOT NULL DEFAULT 'ARS', tipo_cambio REAL NOT NULL DEFAULT 1,
+            neto_gravado_origen_centavos INTEGER NOT NULL DEFAULT 0,
+            iva_origen_centavos INTEGER NOT NULL DEFAULT 0,
+            no_gravado_exento_origen_centavos INTEGER NOT NULL DEFAULT 0,
+            percepciones_origen_centavos INTEGER NOT NULL DEFAULT 0,
+            total_origen_centavos INTEGER NOT NULL DEFAULT 0,
             UNIQUE(cliente, periodo, operacion, tipo_comprobante, punto_venta, numero, cuit)
         )""")
+        columnas_comprobantes = {r[1] for r in conexion.execute("PRAGMA table_info(comprobantes)")}
+        migraciones = {
+            "moneda": "TEXT NOT NULL DEFAULT 'ARS'",
+            "tipo_cambio": "REAL NOT NULL DEFAULT 1",
+            "neto_gravado_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+            "iva_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+            "no_gravado_exento_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+            "percepciones_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+            "total_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+        }
+        for nombre, tipo in migraciones.items():
+            if nombre not in columnas_comprobantes:
+                conexion.execute(f"ALTER TABLE comprobantes ADD COLUMN {nombre} {tipo}")
+        conexion.execute("""UPDATE comprobantes SET
+            neto_gravado_origen_centavos = neto_gravado_centavos,
+            iva_origen_centavos = iva_centavos,
+            no_gravado_exento_origen_centavos = no_gravado_exento_centavos,
+            percepciones_origen_centavos = percepciones_centavos,
+            total_origen_centavos = total_centavos
+            WHERE neto_gravado_origen_centavos = 0 AND iva_origen_centavos = 0
+              AND no_gravado_exento_origen_centavos = 0 AND percepciones_origen_centavos = 0
+              AND total_origen_centavos = 0 AND moneda = 'ARS'""")
         conexion.commit()
     except Exception:
         conexion.rollback()
@@ -79,14 +107,23 @@ def reemplazar_periodo(cliente, periodo, comprobantes, rechazados, archivo_orige
                 fila["cuit"], fila["razon_social"], _centavos(fila["neto_gravado"]),
                 float(fila["alicuota"]), _centavos(fila["iva"]),
                 _centavos(fila["no_gravado_exento"]), _centavos(fila["percepciones"]),
-                _centavos(fila["total"]),
+                _centavos(fila["total"]), fila.get("moneda", "ARS"),
+                float(fila.get("tipo_cambio", 1)),
+                _centavos(fila.get("neto_gravado_origen", fila["neto_gravado"])),
+                _centavos(fila.get("iva_origen", fila["iva"])),
+                _centavos(fila.get("no_gravado_exento_origen", fila["no_gravado_exento"])),
+                _centavos(fila.get("percepciones_origen", fila["percepciones"])),
+                _centavos(fila.get("total_origen", fila["total"])),
             ))
         conexion.executemany("""INSERT INTO comprobantes(
             importacion_id, cliente, periodo, operacion, fecha, tipo_comprobante,
             punto_venta, numero, cuit, razon_social, neto_gravado_centavos,
             alicuota, iva_centavos, no_gravado_exento_centavos,
-            percepciones_centavos, total_centavos
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", registros)
+            percepciones_centavos, total_centavos, moneda, tipo_cambio,
+            neto_gravado_origen_centavos, iva_origen_centavos,
+            no_gravado_exento_origen_centavos, percepciones_origen_centavos,
+            total_origen_centavos
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", registros)
         conexion.commit()
         return importacion_id
     except Exception:
@@ -105,7 +142,12 @@ def consultar_comprobantes(ruta=None, periodo=None):
             iva_centavos / 100.0 AS iva,
             no_gravado_exento_centavos / 100.0 AS no_gravado_exento,
             percepciones_centavos / 100.0 AS percepciones,
-            total_centavos / 100.0 AS total
+            total_centavos / 100.0 AS total, moneda, tipo_cambio,
+            neto_gravado_origen_centavos / 100.0 AS neto_gravado_origen,
+            iva_origen_centavos / 100.0 AS iva_origen,
+            no_gravado_exento_origen_centavos / 100.0 AS no_gravado_exento_origen,
+            percepciones_origen_centavos / 100.0 AS percepciones_origen,
+            total_origen_centavos / 100.0 AS total_origen
             FROM comprobantes"""
         params = ()
         if periodo:

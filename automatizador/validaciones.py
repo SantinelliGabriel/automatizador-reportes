@@ -26,6 +26,8 @@ ALIAS = {
     "percepciones": {"percepciones", "otros_impuestos", "percepciones_otros"},
     "total": {"total", "importe_total", "total_comprobante"},
     "operacion": {"operacion", "tipo_operacion", "libro"},
+    "moneda": {"moneda", "currency", "divisa"},
+    "tipo_cambio": {"tipo_cambio", "tipo_de_cambio", "cotizacion", "exchange_rate", "cambio"},
 }
 TIPOS_VALIDOS = {
     "A", "B", "C", "E", "M",
@@ -142,20 +144,54 @@ def validar_comprobantes(df, periodo):
             motivos.append("Alícuota inválida.")
             alicuota = Decimal("0")
 
-        for col in ("neto_gravado", "iva", "no_gravado_exento", "percepciones", "total"):
+        columnas_importes = ("neto_gravado", "iva", "no_gravado_exento", "percepciones", "total")
+        for col in columnas_importes:
             try:
                 registro[col] = _importe(fila[col])
             except (InvalidOperation, ValueError, TypeError):
                 motivos.append(f"Importe inválido en '{col}'.")
                 registro[col] = Decimal("0")
 
-        if all(isinstance(registro[c], Decimal) for c in ("neto_gravado", "iva", "no_gravado_exento", "percepciones", "total")):
+        moneda = fila.get("moneda", "ARS")
+        moneda = "ARS" if pd.isna(moneda) or not str(moneda).strip() else str(moneda).strip().upper()
+        moneda = {"PES": "ARS", "DOL": "USD"}.get(moneda, moneda)
+        if len(moneda) != 3 or not moneda.isalpha():
+            motivos.append("Moneda inválida; use un código de tres letras, por ejemplo ARS o USD.")
+        tipo_cambio_raw = fila.get("tipo_cambio", 1 if moneda == "ARS" else None)
+        if pd.isna(tipo_cambio_raw) or not str(tipo_cambio_raw).strip():
+            tipo_cambio = None
+        else:
+            try:
+                tipo_cambio = Decimal(str(tipo_cambio_raw).replace(",", "."))
+                if not tipo_cambio.is_finite() or tipo_cambio <= 0:
+                    motivos.append("El tipo de cambio debe ser un número mayor que cero.")
+                    tipo_cambio = None
+            except (InvalidOperation, ValueError, TypeError):
+                motivos.append("Tipo de cambio inválido.")
+                tipo_cambio = None
+        if moneda == "ARS" and tipo_cambio not in (None, Decimal("1")):
+            motivos.append("Para ARS, el tipo de cambio debe ser 1.")
+        elif moneda != "ARS" and tipo_cambio is None:
+            motivos.append("Falta el tipo de cambio a ARS para la moneda extranjera.")
+        if moneda == "ARS" and tipo_cambio is None:
+            tipo_cambio = Decimal("1")
+
+        for col in columnas_importes:
+            registro[f"{col}_origen"] = registro[col]
+        registro["moneda"] = moneda
+        registro["tipo_cambio"] = float(tipo_cambio) if tipo_cambio is not None else None
+
+        if all(isinstance(registro[c], Decimal) for c in columnas_importes):
             esperado = registro["neto_gravado"] * alicuota / Decimal("100")
             if abs(esperado.quantize(CENTAVOS, rounding=ROUND_HALF_UP) - registro["iva"]) > CENTAVOS:
                 motivos.append("El IVA no coincide con neto gravado por alícuota (tolerancia de $0,01).")
             suma = sum((registro[c] for c in ("neto_gravado", "iva", "no_gravado_exento", "percepciones")), Decimal("0"))
             if abs(suma - registro["total"]) > CENTAVOS:
                 motivos.append("Neto, IVA, no gravado/exento y percepciones no coinciden con el total.")
+
+        if moneda != "ARS" and tipo_cambio is not None:
+            for col in columnas_importes:
+                registro[col] = (registro[f"{col}_origen"] * tipo_cambio).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
 
         operacion = str(fila["operacion"]).strip().casefold()
         if operacion not in {"ventas", "compras"}:

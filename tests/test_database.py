@@ -42,3 +42,15 @@ class TestPersistencia(unittest.TestCase):
         guardados = consultar_comprobantes(self.db, "2026-09")
         self.assertEqual(len(guardados), 1)
         self.assertEqual(guardados.iloc[0]["numero"], 101)
+
+    def test_persiste_moneda_cotizacion_e_importes_de_origen_y_ars(self):
+        fila = comprobante(neto_gravado=100, iva=21, total=121, moneda="USD", tipo_cambio=1000)
+        self.importar("2026-09", fila)
+
+        guardado = consultar_comprobantes(self.db, "2026-09").iloc[0]
+        self.assertEqual(guardado["moneda"], "USD")
+        self.assertEqual(guardado["tipo_cambio"], 1000)
+        self.assertEqual(guardado["neto_gravado"], 100000)
+        self.assertEqual(guardado["neto_gravado_origen"], 100)
+        self.assertEqual(guardado["total"], 121000)
+        self.assertEqual(guardado["total_origen"], 121)

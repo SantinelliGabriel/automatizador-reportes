@@ -171,10 +171,15 @@ def _mapear_arca(df, operacion):
             neto = iva = no_gravado = exento = otros = total = 0.0
             error = _agregar_error(error, f"Importes ARCA inválidos: {exc}.")
 
-        if "moneda" in origen:
-            moneda = str(row[origen["moneda"]]).strip().upper()
-            if moneda not in {"PES", "ARS", "", "NAN"}:
-                error = _agregar_error(error, f"Moneda {moneda} no soportada; se requiere conversión antes de consolidar.")
+        moneda = str(row[origen["moneda"]]).strip().upper() if "moneda" in origen else "ARS"
+        moneda = {"PES": "ARS", "DOL": "USD"}.get(moneda, moneda)
+        if moneda in {"", "NAN", "NONE"}:
+            moneda = "ARS"
+        cambio_raw = row[origen["cambio"]] if "cambio" in origen else None
+        if cambio_raw is None or pd.isna(cambio_raw) or not str(cambio_raw).strip():
+            tipo_cambio = 1 if moneda == "ARS" else None
+        else:
+            tipo_cambio = _num(cambio_raw)
         if otros > 0:
             error = _agregar_error(error, "ARCA agrupa otros tributos y percepciones; este formato no permite separarlos con fiabilidad.")
         if "numero_hasta" in origen and str(row[origen["numero_hasta"]]).strip() not in {"", "nan", "None"}:
@@ -216,6 +221,7 @@ def _mapear_arca(df, operacion):
             "alicuota": alicuota, "iva": iva,
             "no_gravado_exento": no_gravado + exento,
             "percepciones": otros, "total": total,
+            "moneda": moneda, "tipo_cambio": tipo_cambio,
             "_error_adaptador": error,
         }
         filas.append(record)
@@ -275,6 +281,7 @@ def ejemplo_mapeo_holistor():
             "Neto Gravado": "neto_gravado", "Alícuota": "alicuota",
             "IVA": "iva", "No Gravado/Exento": "no_gravado_exento",
             "Percepciones": "percepciones", "Total": "total",
+            "Moneda": "moneda", "Tipo de Cambio": "tipo_cambio",
         },
         "anchos_prn": None,
         "columnas_prn": None,
