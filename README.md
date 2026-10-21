@@ -8,7 +8,7 @@ Herramienta para revisar comprobantes de ventas y compras, registrar observacion
 
 **Estado:** proyecto personal de portfolio · **Versión:** [0.1.0](CHANGELOG.md)
 
-![Interfaz de la demo con datos sintéticos](docs/images/interfaz-demo.jpg)
+![Recorrido de la demo sintética y el informe Excel generado](docs/images/flujo-demo.gif)
 
 > Proyecto de apoyo a la revisión. No presenta declaraciones ni reemplaza la validación profesional.
 
