@@ -1,2 +1,4 @@
 pandas==3.0.6
 openpyxl==3.1.5
+streamlit>=1.66,<2
+xlrd>=2,<3

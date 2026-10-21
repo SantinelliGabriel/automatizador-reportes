@@ -8,6 +8,9 @@ __pycache__/
 
 # archivos generados
 reporte_ventas.xlsx
+reporte_iva.xlsx
+comprobantes.db
+*.db
 
 # configuraciones locales
 .vscode/

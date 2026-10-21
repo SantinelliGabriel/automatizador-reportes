@@ -1,0 +1,18 @@
+{
+  "columnas": {
+    "Fecha": "fecha",
+    "Tipo": "tipo_comprobante",
+    "Punto de Venta": "punto_venta",
+    "Número": "numero",
+    "CUIT": "cuit",
+    "Razón Social": "razon_social",
+    "Neto Gravado": "neto_gravado",
+    "Alícuota": "alicuota",
+    "IVA": "iva",
+    "No Gravado/Exento": "no_gravado_exento",
+    "Percepciones": "percepciones",
+    "Total": "total"
+  },
+  "anchos_prn": null,
+  "columnas_prn": null
+}
