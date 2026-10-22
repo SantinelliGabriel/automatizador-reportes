@@ -10,7 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from automatizador.config import ARCHIVO_BD
-from automatizador.decimales import normalizar_decimal
+from automatizador.decimales import convertir_a_ars, normalizar_decimal
 
 
 VERSION_ESQUEMA = 2
@@ -199,8 +199,7 @@ def _migrar_a_v2(conexion):
         if any(len(valor.normalize().as_tuple().digits) > 15 for valor in (alicuota, tipo_cambio)):
             revision.append("más de 15 cifras significativas")
         if any(
-            (Decimal(datos[f"{campo}_origen_centavos"]).scaleb(-2) * tipo_cambio)
-            .quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+            convertir_a_ars(Decimal(datos[f"{campo}_origen_centavos"]).scaleb(-2), tipo_cambio)
             != Decimal(datos[f"{campo}_centavos"]).scaleb(-2)
             for campo in COLUMNAS_IMPORTES
         ):

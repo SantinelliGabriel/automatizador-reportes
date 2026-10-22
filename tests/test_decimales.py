@@ -8,13 +8,20 @@ import pandas as pd
 import numpy as np
 
 from automatizador.database import consultar_comprobantes, crear_tabla, reemplazar_periodo
-from automatizador.decimales import normalizar_decimal
+from automatizador.decimales import convertir_a_ars, normalizar_decimal
 from automatizador.reportes import construir_hojas
 from automatizador.validaciones import validar_comprobantes
 from tests.helpers import comprobante, directorio_temporal
 
 
 class TestDecimales(unittest.TestCase):
+    def test_conversion_a_ars_redondea_una_vez_con_decimal(self):
+        self.assertEqual(convertir_a_ars(Decimal("0.005"), Decimal("1")), Decimal("0.01"))
+        self.assertEqual(convertir_a_ars(Decimal("0.004"), Decimal("1")), Decimal("0.00"))
+        self.assertEqual(convertir_a_ars(Decimal("100.00"), Decimal("1500.12345678")), Decimal("150012.35"))
+        with self.assertRaises(TypeError):
+            convertir_a_ars(Decimal("1.00"), 1.0)
+
     def test_numpy_float64_usa_representacion_float_sin_prefijo_numpy(self):
         self.assertEqual(normalizar_decimal(np.float64(1500.12345678), "tipo_cambio"), "1500.12345678")
         self.assertEqual(normalizar_decimal(np.float64(21.0), "alicuota"), "21")

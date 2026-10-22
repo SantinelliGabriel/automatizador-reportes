@@ -7,7 +7,7 @@ import unicodedata
 
 import pandas as pd
 
-from automatizador.decimales import normalizar_decimal
+from automatizador.decimales import convertir_a_ars, normalizar_decimal
 
 
 COLUMNAS = [
@@ -255,10 +255,10 @@ def validar_comprobantes(df, periodo):
             linea["iva_origen"] = linea["iva"]
         if moneda != "ARS" and tipo_cambio is not None:
             for col in columnas_importes:
-                registro[col] = (registro[f"{col}_origen"] * tipo_cambio).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+                registro[col] = convertir_a_ars(registro[f"{col}_origen"], tipo_cambio)
             for linea in detalle:
-                linea["neto_gravado"] = (linea["neto_gravado"] * tipo_cambio).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
-                linea["iva"] = (linea["iva"] * tipo_cambio).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+                linea["neto_gravado"] = convertir_a_ars(linea["neto_gravado"], tipo_cambio)
+                linea["iva"] = convertir_a_ars(linea["iva"], tipo_cambio)
         registro["detalle_alicuotas"] = detalle
 
         operacion = str(fila["operacion"]).strip().casefold()
