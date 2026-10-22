@@ -91,6 +91,10 @@ automatizador \
 
 Más detalles de [adaptadores ARCA/Holistor](docs/adaptadores.md).
 
+## Migración de la base
+
+Al abrir una base SQLite anterior, el programa migra su esquema y crea un respaldo `.v1.bak.db` antes de hacerlo. La CLI y la interfaz local muestran la ruta del respaldo; conservá esa copia hasta revisar los informes generados.
+
 ## Flujo
 
 ```mermaid
