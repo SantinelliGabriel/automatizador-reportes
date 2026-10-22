@@ -9,6 +9,25 @@ from automatizador.generar_datos_demo import cuit_sintetico
 
 
 class TestValidacionComprobantes(unittest.TestCase):
+    def test_rechaza_alicuota_negativa_y_tipo_de_cambio_no_positivo(self):
+        filas = [
+            comprobante(numero=1, alicuota="-1"),
+            comprobante(numero=2, detalle_alicuotas=[{
+                "alicuota": "-1", "neto_gravado": "100.00", "iva": "-1.00",
+            }]),
+            comprobante(numero=3, moneda="USD", tipo_cambio="0"),
+            comprobante(numero=4, moneda="USD", tipo_cambio="-1"),
+        ]
+
+        aceptados, rechazados = validar_comprobantes(pd.DataFrame(filas), "2026-09")
+
+        self.assertTrue(aceptados.empty)
+        self.assertEqual(len(rechazados), 4)
+        self.assertIn("Alícuota inválida", rechazados.iloc[0]["motivo"])
+        self.assertIn("Detalle de alícuotas inválido", rechazados.iloc[1]["motivo"])
+        self.assertIn("mayor que cero", rechazados.iloc[2]["motivo"])
+        self.assertIn("mayor que cero", rechazados.iloc[3]["motivo"])
+
     def test_acepta_comprobante_y_alias_de_encabezados(self):
         df = pd.DataFrame([comprobante()]).rename(columns={
             "fecha": "Fecha comprobante", "tipo_comprobante": "Tipo",
