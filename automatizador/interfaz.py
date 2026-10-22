@@ -150,7 +150,8 @@ if pagina == "Importar comprobantes":
         } for archivo in plan.archivos]), hide_index=True, width="stretch")
         if plan.filas_validas:
             filas_vista = pd.concat(
-                [a.comprobantes.assign(cliente=a.cliente) for a in plan.archivos if not a.comprobantes.empty],
+                [a.comprobantes.assign(cliente=a.cliente) for a in plan.archivos
+                 if a.aplicar and not a.comprobantes.empty],
                 ignore_index=True,
             )
             st.caption("Muestra de comprobantes que se importarían (hasta 100 filas).")
@@ -171,6 +172,10 @@ if pagina == "Importar comprobantes":
                         "totales": resultado.totales,
                         "reporte": salida.read_bytes(),
                         "migracion": resultado.migracion,
+                        "operaciones_reemplazadas": resultado.operaciones_reemplazadas,
+                        "operaciones_conservadas": resultado.operaciones_conservadas,
+                        "conflictos": [str(motivo) for motivo in resultado.errores.get("motivo", [])
+                                       if str(motivo).startswith("Conflicto en el lote:")],
                     }
                     st.session_state["firma_confirmada"] = firma
                 st.session_state.pop("plan_importacion", None)
@@ -186,6 +191,10 @@ if pagina == "Importar comprobantes":
             f"Importación terminada y confirmada: {resultado_guardado['filas_validas']} filas válidas y "
             f"{resultado_guardado['filas_observadas']} observadas."
         )
+        st.write("Operaciones reemplazadas:", ", ".join(resultado_guardado["operaciones_reemplazadas"]) or "ninguna")
+        st.write("Operaciones conservadas:", ", ".join(resultado_guardado["operaciones_conservadas"]) or "ninguna")
+        for conflicto in resultado_guardado["conflictos"]:
+            st.error(conflicto)
         st.write("Totales (ARS)", {
             columna: f"${importe:,.2f}" for columna, importe in resultado_guardado["totales"].items()
         })
