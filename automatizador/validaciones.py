@@ -7,6 +7,8 @@ import unicodedata
 
 import pandas as pd
 
+from automatizador.decimales import normalizar_decimal
+
 
 COLUMNAS = [
     "fecha", "tipo_comprobante", "punto_venta", "numero", "cuit",
@@ -103,7 +105,7 @@ def _leer_detalle_alicuotas(valor):
     for linea in valor:
         if not isinstance(linea, dict):
             raise ValueError("Cada línea del detalle de alícuotas debe ser un objeto.")
-        tasa = Decimal(str(linea.get("alicuota", linea.get("tasa"))).replace("%", "").replace(",", "."))
+        tasa = Decimal(normalizar_decimal(linea.get("alicuota", linea.get("tasa")), "alicuota"))
         if tasa not in ALICUOTAS_VALIDAS:
             raise ValueError(f"Alícuota inválida en el detalle: {tasa}.")
         neto = _importe(linea.get("neto_gravado", linea.get("neto", 0)))
@@ -177,15 +179,15 @@ def validar_comprobantes(df, periodo):
             motivos.append(f"Detalle de alícuotas inválido: {error}")
         if detalle:
             alicuota = detalle[0]["alicuota"] if len(detalle) == 1 else Decimal("0")
-            registro["alicuota"] = float(alicuota)
+            registro["alicuota"] = alicuota
         else:
             try:
-                alicuota = Decimal(str(fila["alicuota"]).replace("%", "").replace(",", "."))
+                alicuota = Decimal(normalizar_decimal(fila["alicuota"], "alicuota"))
                 if alicuota not in ALICUOTAS_VALIDAS:
                     motivos.append("Alícuota inválida; use 0, 2,5, 5, 10,5, 21 o 27.")
-                registro["alicuota"] = float(alicuota)
-            except (InvalidOperation, ValueError, TypeError):
-                motivos.append("Alícuota inválida.")
+                registro["alicuota"] = alicuota
+            except (InvalidOperation, ValueError, TypeError) as error:
+                motivos.append(f"Alícuota inválida: {error}.")
                 alicuota = Decimal("0")
 
         columnas_importes = ("neto_gravado", "iva", "no_gravado_exento", "percepciones", "total")
@@ -214,12 +216,12 @@ def validar_comprobantes(df, periodo):
             tipo_cambio = None
         else:
             try:
-                tipo_cambio = Decimal(str(tipo_cambio_raw).replace(",", "."))
+                tipo_cambio = Decimal(normalizar_decimal(tipo_cambio_raw, "tipo_cambio"))
                 if not tipo_cambio.is_finite() or tipo_cambio <= 0:
                     motivos.append("El tipo de cambio debe ser un número mayor que cero.")
                     tipo_cambio = None
-            except (InvalidOperation, ValueError, TypeError):
-                motivos.append("Tipo de cambio inválido.")
+            except (InvalidOperation, ValueError, TypeError) as error:
+                motivos.append(f"Tipo de cambio inválido: {error}.")
                 tipo_cambio = None
         if moneda == "ARS" and tipo_cambio not in (None, Decimal("1")):
             motivos.append("Para ARS, el tipo de cambio debe ser 1.")
@@ -231,7 +233,7 @@ def validar_comprobantes(df, periodo):
         for col in columnas_importes:
             registro[f"{col}_origen"] = registro[col]
         registro["moneda"] = moneda
-        registro["tipo_cambio"] = float(tipo_cambio) if tipo_cambio is not None else None
+        registro["tipo_cambio"] = tipo_cambio
 
         if all(isinstance(registro[c], Decimal) for c in columnas_importes):
             if not detalle:
@@ -257,9 +259,7 @@ def validar_comprobantes(df, periodo):
             for linea in detalle:
                 linea["neto_gravado"] = (linea["neto_gravado"] * tipo_cambio).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
                 linea["iva"] = (linea["iva"] * tipo_cambio).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
-        registro["detalle_alicuotas"] = [{
-            clave: float(valor) for clave, valor in linea.items()
-        } for linea in detalle]
+        registro["detalle_alicuotas"] = detalle
 
         operacion = str(fila["operacion"]).strip().casefold()
         if operacion not in {"ventas", "compras"}:
