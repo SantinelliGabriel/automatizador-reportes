@@ -9,6 +9,21 @@ from tests.test_migracion_decimal import base_v1
 
 
 class TestConsola(unittest.TestCase):
+    def test_base_nueva_no_anuncia_migracion_ni_crea_respaldo(self):
+        with directorio_temporal() as carpeta:
+            carpeta = Path(carpeta)
+            entrada = carpeta / "Cliente Sintético.csv"
+            pd.DataFrame([comprobante()]).to_csv(entrada, index=False)
+            base = carpeta / "nueva.db"
+            with self.assertLogs(level="INFO") as registros:
+                codigo = main([
+                    "--input", str(entrada), "--output", str(carpeta / "reporte.xlsx"),
+                    "--database", str(base), "--period", "2026-09",
+                ])
+            self.assertEqual(codigo, 0)
+            self.assertFalse(any("Base SQLite migrada" in linea for linea in registros.output))
+            self.assertEqual(list(carpeta.glob("*.bak*.db")), [])
+
     def test_avisa_migracion_y_ruta_del_respaldo(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)
