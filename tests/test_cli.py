@@ -8,6 +8,26 @@ from tests.helpers import comprobante, directorio_temporal
 
 
 class TestConsola(unittest.TestCase):
+    def test_crea_directorios_inexistentes_para_reporte_y_base(self):
+        with directorio_temporal() as carpeta:
+            carpeta = Path(carpeta)
+            entrada = carpeta / "Cliente Sintético.csv"
+            pd.DataFrame([comprobante()]).to_csv(entrada, index=False)
+            salida = carpeta / "resultados" / "reporte.xlsx"
+            base = carpeta / "datos" / "comprobantes.db"
+            self.assertFalse(salida.parent.exists())
+            self.assertFalse(base.parent.exists())
+
+            codigo = main([
+                "--input", str(entrada), "--output", str(salida),
+                "--database", str(base), "--period", "2026-09",
+            ])
+
+            self.assertEqual(codigo, 0)
+            self.assertTrue(salida.is_file())
+            self.assertTrue(base.is_file())
+            self.assertEqual(len(pd.read_excel(salida, sheet_name="Comprobantes")), 1)
+
     def test_muestra_totales_decimales_con_dos_decimales(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)
