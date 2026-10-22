@@ -5,6 +5,7 @@ from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
+import numpy as np
 
 from automatizador.database import consultar_comprobantes, crear_tabla, reemplazar_periodo
 from automatizador.decimales import normalizar_decimal
@@ -14,6 +15,10 @@ from tests.helpers import comprobante, directorio_temporal
 
 
 class TestDecimales(unittest.TestCase):
+    def test_numpy_float64_usa_representacion_float_sin_prefijo_numpy(self):
+        self.assertEqual(normalizar_decimal(np.float64(1500.12345678), "tipo_cambio"), "1500.12345678")
+        self.assertEqual(normalizar_decimal(np.float64(21.0), "alicuota"), "21")
+
     def test_una_forma_canonica_y_escalas_maximas(self):
         self.assertEqual({normalizar_decimal(valor, "alicuota") for valor in (21, "21.0", "21.00")}, {"21"})
         self.assertEqual(normalizar_decimal("10,50%", "alicuota"), "10.5")

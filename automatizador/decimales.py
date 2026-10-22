@@ -10,7 +10,7 @@ def normalizar_decimal(valor, campo: str, *, validar_escala: bool = True) -> str
     """Devuelve texto decimal sin ceros finales ni exponente."""
     if campo not in ESCALAS_MAXIMAS:
         raise ValueError(f"Campo decimal desconocido: {campo}")
-    texto = repr(valor) if isinstance(valor, float) else str(valor)
+    texto = repr(float(valor)) if isinstance(valor, float) else str(valor)
     texto = texto.strip().replace(",", ".")
     if campo == "alicuota":
         texto = texto.removesuffix("%").strip()
