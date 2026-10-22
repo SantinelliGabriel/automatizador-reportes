@@ -5,9 +5,43 @@ import pandas as pd
 
 from automatizador.cli import main
 from tests.helpers import comprobante, directorio_temporal
+from tests.test_migracion_decimal import base_v1
 
 
 class TestConsola(unittest.TestCase):
+    def test_base_nueva_no_anuncia_migracion_ni_crea_respaldo(self):
+        with directorio_temporal() as carpeta:
+            carpeta = Path(carpeta)
+            entrada = carpeta / "Cliente Sintético.csv"
+            pd.DataFrame([comprobante()]).to_csv(entrada, index=False)
+            base = carpeta / "nueva.db"
+            with self.assertLogs(level="INFO") as registros:
+                codigo = main([
+                    "--input", str(entrada), "--output", str(carpeta / "reporte.xlsx"),
+                    "--database", str(base), "--period", "2026-09",
+                ])
+            self.assertEqual(codigo, 0)
+            self.assertFalse(any("Base SQLite migrada" in linea for linea in registros.output))
+            self.assertEqual(list(carpeta.glob("*.bak*.db")), [])
+
+    def test_avisa_migracion_y_ruta_del_respaldo(self):
+        with directorio_temporal() as carpeta:
+            carpeta = Path(carpeta)
+            base = base_v1(carpeta)
+            entrada = carpeta / "Cliente Sintético.csv"
+            pd.DataFrame([comprobante()]).to_csv(entrada, index=False)
+            with self.assertLogs(level="INFO") as registros:
+                codigo = main([
+                    "--input", str(entrada), "--output", str(carpeta / "reporte.xlsx"),
+                    "--database", str(base), "--period", "2026-09",
+                ])
+            self.assertEqual(codigo, 0)
+            self.assertTrue(any(
+                "Base SQLite migrada de versión 1 a 2" in linea
+                and str(carpeta / "legacy.v1.bak.db") in linea
+                for linea in registros.output
+            ))
+
     def test_crea_directorios_inexistentes_para_reporte_y_base(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)

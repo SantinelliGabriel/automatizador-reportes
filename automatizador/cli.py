@@ -25,7 +25,9 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         args.database.parent.mkdir(parents=True, exist_ok=True)
-        crear_tabla(args.database)
+        migracion = crear_tabla(args.database)
+        if migracion:
+            logging.info("%s", migracion.mensaje())
         if args.history:
             historial = consultar_importaciones(args.database)
             print("No hay importaciones registradas." if historial.empty else historial.to_string(index=False))

@@ -1,16 +1,27 @@
 import sqlite3
 import unittest
+from contextlib import closing
 from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
 
-from automatizador.database import crear_tabla, consultar_comprobantes, consultar_totales, reemplazar_periodo
+from automatizador.database import _centavos, crear_tabla, consultar_comprobantes, consultar_totales, reemplazar_periodo
 from automatizador.validaciones import validar_comprobantes
 from tests.helpers import comprobante, directorio_temporal
 
 
 class TestPersistencia(unittest.TestCase):
+    def test_centavos_acepta_decimales_exactos_y_rechaza_fracciones_de_centavo(self):
+        self.assertEqual(_centavos(Decimal("0.56")), 56)
+        self.assertEqual(_centavos(Decimal("0.560")), 56)
+        self.assertEqual(_centavos(Decimal("-0.56")), -56)
+        with self.assertRaisesRegex(ValueError, "no como float"):
+            _centavos(0.5699999999999999)
+        for valor in ("0.5699999999999999", Decimal("0.565"), Decimal("0.561")):
+            with self.subTest(valor=str(valor)), self.assertRaisesRegex(ValueError, "más de dos decimales"):
+                _centavos(valor)
+
     def setUp(self):
         self.temp = directorio_temporal()
         self.db = Path(self.temp.name) / "comprobantes.db"
@@ -55,6 +66,32 @@ class TestPersistencia(unittest.TestCase):
         self.assertEqual(guardado["neto_gravado_origen"], 100)
         self.assertEqual(guardado["total"], 121000)
         self.assertEqual(guardado["total_origen"], 121)
+
+    def test_cotizaciones_textuales_conservan_valor_y_formato_canonico(self):
+        casos = (
+            ("1000", "1000", "100000"),
+            ("1500.50", "1500.5", "100000"),
+            ("100", "100", "100000"),
+            ("0.00000001", "0.00000001", "100000000"),
+            ("1e3", "1000", "100000"),
+        )
+        for indice, (cotizacion, esperado, origen) in enumerate(casos, start=1):
+            with self.subTest(cotizacion=cotizacion):
+                fila = comprobante(
+                    numero=indice, neto_gravado=origen, iva=0,
+                    alicuota=0, total=origen, moneda="USD", tipo_cambio=cotizacion,
+                )
+                aceptados, rechazados = validar_comprobantes(pd.DataFrame([fila]), "2026-09")
+                self.assertTrue(rechazados.empty, rechazados.to_dict("records"))
+                reemplazar_periodo("Cliente Demo", "2026-09", aceptados, rechazados, "sintetico.csv", self.db)
+                with closing(sqlite3.connect(self.db)) as conexion:
+                    guardado = conexion.execute(
+                        "SELECT tipo_cambio FROM comprobantes WHERE numero = ?", (indice,)
+                    ).fetchone()[0]
+                leido = consultar_comprobantes(self.db, "2026-09").iloc[0]["tipo_cambio"]
+                self.assertEqual(guardado, esperado)
+                self.assertEqual(leido, Decimal(esperado))
+                self.assertNotIn("e", guardado.lower())
 
     def test_totales_sin_comprobantes_devuelven_cero_decimal(self):
         totales = consultar_totales(self.db, "2026-09")

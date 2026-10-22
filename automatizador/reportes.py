@@ -1,6 +1,7 @@
 """Construye el libro consolidado de comprobantes y observaciones."""
 
 import json
+from decimal import Decimal
 
 from openpyxl import load_workbook
 from openpyxl.styles import Alignment, Font, PatternFill
@@ -24,8 +25,7 @@ def construir_hojas(comprobantes):
     detalle = comprobantes.copy()
     if "detalle_alicuotas" in detalle:
         varias = detalle["detalle_alicuotas"].map(lambda partidas: isinstance(partidas, (list, tuple)) and len(partidas) > 1)
-        # pandas 3 rejects assigning text into a float column, so make the
-        # display column capable of holding both a rate and the label.
+        # La columna de presentación combina tasas Decimal y la etiqueta "Varias".
         detalle["alicuota"] = detalle["alicuota"].astype(object)
         detalle.loc[varias, "alicuota"] = "Varias"
     # NC reducen débito/crédito; ND y facturas suman. Se conserva el importe original en el detalle.
@@ -49,16 +49,17 @@ def construir_hojas(comprobantes):
         for partida in partidas:
             filas_alicuota.append({
                 "operacion": comprobante["operacion"],
-                "alicuota": float(partida["alicuota"]),
-                "neto_gravado": float(partida["neto_gravado"]) * comprobante["factor"],
-                "iva": float(partida["iva"]) * comprobante["factor"],
+                "alicuota": Decimal(str(partida["alicuota"])),
+                "neto_gravado": Decimal(str(partida["neto_gravado"])) * comprobante["factor"],
+                "iva": Decimal(str(partida["iva"])) * comprobante["factor"],
             })
     resumen_alicuota = pd.DataFrame(filas_alicuota).groupby(
         ["operacion", "alicuota"], as_index=False
     ).agg(neto_gravado=("neto_gravado", "sum"), iva=("iva", "sum"))
     if "detalle_alicuotas" in detalle:
         detalle["detalle_alicuotas"] = detalle["detalle_alicuotas"].map(
-            lambda partidas: json.dumps(partidas, ensure_ascii=False) if isinstance(partidas, (list, tuple)) else "[]"
+            lambda partidas: json.dumps(partidas, ensure_ascii=False, default=str)
+            if isinstance(partidas, (list, tuple)) else "[]"
         )
     detalle = detalle.drop(columns=["factor", "neto_impacto", "iva_impacto", "total_impacto"])
     return detalle, resumen_cliente, resumen_alicuota
@@ -91,9 +92,9 @@ def construir_detalle_alicuotas(comprobantes):
                 "punto_venta": comprobante["punto_venta"],
                 "numero": comprobante["numero"],
                 "cuit": comprobante["cuit"],
-                "alicuota": partida["alicuota"],
-                "neto_gravado": float(partida["neto_gravado"]) * factor,
-                "iva": float(partida["iva"]) * factor,
+                "alicuota": Decimal(str(partida["alicuota"])),
+                "neto_gravado": Decimal(str(partida["neto_gravado"])) * factor,
+                "iva": Decimal(str(partida["iva"])) * factor,
                 "moneda": comprobante.get("moneda", "ARS"),
                 "tipo_cambio": comprobante.get("tipo_cambio", 1),
             })

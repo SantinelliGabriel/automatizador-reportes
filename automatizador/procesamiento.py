@@ -1,6 +1,7 @@
 """Casos de uso de importación y generación de reportes, independientes de la CLI."""
 
 import logging
+import hashlib
 from dataclasses import dataclass
 from decimal import Decimal
 from pathlib import Path
@@ -9,11 +10,10 @@ import pandas as pd
 
 from automatizador.adaptadores import leer_comprobantes
 from automatizador.database import (
-    crear_tabla,
-    consultar_comprobantes,
+    MigracionBase,
     consultar_totales,
-    reemplazar_periodos,
 )
+from automatizador.repositorio import RepositorioComprobantes, RepositorioSQLite
 from automatizador.reportes import (
     aplicar_formato_excel,
     construir_detalle_alicuotas,
@@ -29,6 +29,7 @@ class ArchivoPrevisualizado:
     comprobantes: pd.DataFrame
     observaciones: pd.DataFrame
     aplicar: bool
+    sha256: str = ""
 
 
 @dataclass(frozen=True)
@@ -60,6 +61,7 @@ class ResultadoProcesamiento:
     filas_validas: int
     filas_observadas: int
     totales: dict[str, Decimal]
+    migracion: MigracionBase | None = None
 
 
 def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mapping_path=None):
@@ -76,8 +78,14 @@ def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mappi
     previsualizados = []
     for archivo in archivos:
         cliente = archivo.stem.strip()
+        digest = hashlib.sha256()
+        sha256 = ""
         aplicar = True
         try:
+            with archivo.open("rb") as origen_bytes:
+                for bloque in iter(lambda: origen_bytes.read(1024 * 1024), b""):
+                    digest.update(bloque)
+            sha256 = digest.hexdigest()
             origen_df = leer_comprobantes(archivo, formato, operacion, mapping_path)
             origen_df["_fila_original"] = range(2, len(origen_df) + 2)
             aceptados, rechazados = validar_comprobantes(origen_df, periodo)
@@ -116,14 +124,15 @@ def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mappi
             comprobantes=aceptados,
             observaciones=rechazados,
             aplicar=aplicar,
+            sha256=sha256,
         ))
         logging.info("%s: %s aceptados, %s observados.", cliente, len(aceptados), len(rechazados))
     return PrevisualizacionImportacion(periodo=periodo, archivos=tuple(previsualizados))
 
 
-def confirmar_previsualizacion(previsualizacion, salida, base):
-    """Aplica de forma atómica los archivos utilizables y genera el informe."""
-    crear_tabla(base)
+def confirmar_importacion(previsualizacion: PrevisualizacionImportacion,
+                          repositorio: RepositorioComprobantes) -> list[int]:
+    """Confirma comprobantes y observaciones; no genera archivos."""
     lotes = [
         {
             "cliente": archivo.cliente,
@@ -131,17 +140,20 @@ def confirmar_previsualizacion(previsualizacion, salida, base):
             "comprobantes": archivo.comprobantes,
             "rechazados": archivo.observaciones,
             "archivo_origen": archivo.nombre,
+            "sha256": archivo.sha256,
+            "aplicar": archivo.aplicar,
         }
         for archivo in previsualizacion.archivos
-        if archivo.aplicar
     ]
-    if lotes:
-        reemplazar_periodos(lotes, base)
+    return repositorio.reemplazar_periodos(lotes) if lotes else []
 
-    comprobantes = consultar_comprobantes(base, previsualizacion.periodo)
+
+def generar_informe(periodo: str, salida: Path, repositorio: RepositorioComprobantes) -> Path:
+    """Regenera el Excel desde los datos confirmados en el repositorio."""
+    comprobantes = repositorio.consultar_comprobantes(periodo)
     detalle, resumen_cliente, resumen_alicuota = construir_hojas(comprobantes)
     detalle_iva = construir_detalle_alicuotas(comprobantes)
-    observaciones = previsualizacion.observaciones
+    observaciones = repositorio.consultar_observaciones(periodo)
     salida = Path(salida)
     salida.parent.mkdir(parents=True, exist_ok=True)
     with pd.ExcelWriter(salida, engine="openpyxl") as writer:
@@ -151,8 +163,18 @@ def confirmar_previsualizacion(previsualizacion, salida, base):
         resumen_alicuota.to_excel(writer, sheet_name="IVA por alícuota", index=False)
         observaciones.to_excel(writer, sheet_name="Observaciones", index=False)
     aplicar_formato_excel(salida)
-    logging.info("Período %s: reporte guardado en %s", previsualizacion.periodo, salida)
+    logging.info("Período %s: reporte guardado en %s", periodo, salida)
     logging.info("Observaciones: %s", len(observaciones))
+    return salida
+
+
+def confirmar_previsualizacion(previsualizacion, salida, base):
+    """Compatibilidad: confirma y genera el informe para CLI y Streamlit."""
+    repositorio = RepositorioSQLite(base)
+    confirmar_importacion(previsualizacion, repositorio)
+    salida = generar_informe(previsualizacion.periodo, salida, repositorio)
+    comprobantes = repositorio.consultar_comprobantes(previsualizacion.periodo)
+    observaciones = previsualizacion.observaciones
     totales = consultar_totales(base, previsualizacion.periodo)
     return ResultadoProcesamiento(
         salida=salida,
@@ -161,6 +183,7 @@ def confirmar_previsualizacion(previsualizacion, salida, base):
         filas_validas=previsualizacion.filas_validas,
         filas_observadas=previsualizacion.filas_observadas,
         totales=totales,
+        migracion=repositorio.migracion,
     )
 
 

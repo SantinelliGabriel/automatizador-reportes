@@ -4,6 +4,11 @@ Los cambios relevantes de cada versión se registran en este archivo.
 
 ## [Unreleased]
 
+- La confirmación guarda comprobantes y la generación del informe se ejecuta por separado.
+- Las filas observadas se persisten junto con el historial de importaciones.
+- La alícuota y el tipo de cambio se guardan como texto decimal canónico.
+- La migración de SQLite a la versión 2 crea un respaldo antes de convertir esos campos.
+
 ## [0.1.1] - 2026-10-21
 
 ### Added
