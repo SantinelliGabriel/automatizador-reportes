@@ -6,6 +6,7 @@ from pathlib import Path
 from streamlit.testing.v1 import AppTest
 
 from tests.helpers import ROOT
+from tests.test_migracion_decimal import base_v1
 
 
 def app_test(path):
@@ -14,6 +15,28 @@ def app_test(path):
 
 
 class TestInterfaz(unittest.TestCase):
+    def test_avisa_migracion_y_ruta_del_respaldo(self):
+        entrada = ROOT / "ejemplos" / "Cliente Demo Norte.xlsx"
+        with tempfile.TemporaryDirectory(dir=ROOT / ".test_tmp") as carpeta:
+            base = base_v1(carpeta)
+            app = app_test(ROOT / "automatizador" / "interfaz.py")
+            app.run()
+            app.text_input[1].set_value(str(base))
+            app.text_input[0].set_value("2026-09")
+            app.file_uploader[0].set_value(
+                (entrada.name, entrada.read_bytes(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+            )
+            app.run()
+            app.button[0].click()
+            app.run()
+
+            self.assertFalse(app.exception)
+            self.assertTrue(any(
+                "Base SQLite migrada de versión 1 a 2" in item.value
+                and str(Path(carpeta) / "legacy.v1.bak.db") in item.value
+                for item in app.info
+            ))
+
     def test_importa_el_ejemplo_y_muestra_resultado(self):
         entrada = ROOT / "ejemplos" / "Cliente Demo Norte.xlsx"
         app = app_test(ROOT / "automatizador" / "interfaz.py")

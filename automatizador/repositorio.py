@@ -35,7 +35,7 @@ class RepositorioSQLite:
     def __init__(self, ruta: Path | str):
         self.ruta = Path(ruta)
         self.ruta.parent.mkdir(parents=True, exist_ok=True)
-        crear_tabla(self.ruta)
+        self.migracion = crear_tabla(self.ruta)
 
     def reemplazar_periodos(self, importaciones: list[dict]) -> list[int]:
         return reemplazar_periodos(importaciones, self.ruta)

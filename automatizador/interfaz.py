@@ -170,6 +170,7 @@ if pagina == "Importar comprobantes":
                         "filas_observadas": resultado.filas_observadas,
                         "totales": resultado.totales,
                         "reporte": salida.read_bytes(),
+                        "migracion": resultado.migracion,
                     }
                     st.session_state["firma_confirmada"] = firma
                 st.session_state.pop("plan_importacion", None)
@@ -179,6 +180,8 @@ if pagina == "Importar comprobantes":
 
     resultado_guardado = st.session_state.get("resultado_importacion")
     if resultado_guardado and resultado_guardado["periodo"] == periodo:
+        if resultado_guardado["migracion"]:
+            st.info(resultado_guardado["migracion"].mensaje())
         st.success(
             f"Importación terminada y confirmada: {resultado_guardado['filas_validas']} filas válidas y "
             f"{resultado_guardado['filas_observadas']} observadas."

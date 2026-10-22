@@ -10,6 +10,7 @@ import pandas as pd
 
 from automatizador.adaptadores import leer_comprobantes
 from automatizador.database import (
+    MigracionBase,
     consultar_totales,
 )
 from automatizador.repositorio import RepositorioComprobantes, RepositorioSQLite
@@ -60,6 +61,7 @@ class ResultadoProcesamiento:
     filas_validas: int
     filas_observadas: int
     totales: dict[str, Decimal]
+    migracion: MigracionBase | None = None
 
 
 def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mapping_path=None):
@@ -181,6 +183,7 @@ def confirmar_previsualizacion(previsualizacion, salida, base):
         filas_validas=previsualizacion.filas_validas,
         filas_observadas=previsualizacion.filas_observadas,
         totales=totales,
+        migracion=repositorio.migracion,
     )
 
 
