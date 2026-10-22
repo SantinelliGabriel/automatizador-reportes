@@ -6,12 +6,22 @@ from pathlib import Path
 
 import pandas as pd
 
-from automatizador.database import crear_tabla, consultar_comprobantes, consultar_totales, reemplazar_periodo
+from automatizador.database import _centavos, crear_tabla, consultar_comprobantes, consultar_totales, reemplazar_periodo
 from automatizador.validaciones import validar_comprobantes
 from tests.helpers import comprobante, directorio_temporal
 
 
 class TestPersistencia(unittest.TestCase):
+    def test_centavos_acepta_decimales_exactos_y_rechaza_fracciones_de_centavo(self):
+        self.assertEqual(_centavos(Decimal("0.56")), 56)
+        self.assertEqual(_centavos(Decimal("0.560")), 56)
+        self.assertEqual(_centavos(Decimal("-0.56")), -56)
+        with self.assertRaisesRegex(ValueError, "no como float"):
+            _centavos(0.5699999999999999)
+        for valor in ("0.5699999999999999", Decimal("0.565"), Decimal("0.561")):
+            with self.subTest(valor=str(valor)), self.assertRaisesRegex(ValueError, "más de dos decimales"):
+                _centavos(valor)
+
     def setUp(self):
         self.temp = directorio_temporal()
         self.db = Path(self.temp.name) / "comprobantes.db"

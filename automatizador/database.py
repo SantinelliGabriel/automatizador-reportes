@@ -4,7 +4,7 @@ import sqlite3
 import json
 import shutil
 from dataclasses import dataclass
-from decimal import Decimal, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from pathlib import Path
 
 import pandas as pd
@@ -212,7 +212,18 @@ def _migrar_a_v2(conexion):
 
 
 def _centavos(valor):
-    return int(Decimal(str(valor)) * 100)
+    if isinstance(valor, float):
+        raise ValueError("El importe debe llegar como Decimal o texto, no como float.")
+    try:
+        importe = Decimal(str(valor))
+        if not importe.is_finite():
+            raise ValueError("El importe debe ser finito.")
+        ajustado = importe.quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+    except (InvalidOperation, TypeError) as error:
+        raise ValueError(f"Importe inválido: {valor}") from error
+    if importe != ajustado:
+        raise ValueError(f"El importe tiene más de dos decimales: {valor}")
+    return int(ajustado * 100)
 
 
 def _valor_observado(valor):
