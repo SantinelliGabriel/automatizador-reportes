@@ -9,6 +9,9 @@ import pandas as pd
 from automatizador.config import ARCHIVO_BD
 
 
+VERSION_ESQUEMA = 1
+
+
 def conectar_bd(ruta=None):
     conexion = sqlite3.connect(ruta or ARCHIVO_BD)
     conexion.execute("PRAGMA foreign_keys = ON")
@@ -18,19 +21,40 @@ def conectar_bd(ruta=None):
 def crear_tabla(ruta=None):
     conexion = conectar_bd(ruta)
     try:
-        conexion.execute("""CREATE TABLE IF NOT EXISTS importaciones (
+        version = conexion.execute("PRAGMA user_version").fetchone()[0]
+        if version > VERSION_ESQUEMA:
+            raise ValueError(f"La base usa una versión de esquema no admitida: {version}")
+        if version == VERSION_ESQUEMA:
+            return
+        conexion.execute("BEGIN IMMEDIATE")
+        _migrar_a_v1(conexion)
+        conexion.execute(f"PRAGMA user_version = {VERSION_ESQUEMA}")
+        conexion.commit()
+    except Exception:
+        conexion.rollback()
+        raise
+    finally:
+        conexion.close()
+
+
+def _migrar_a_v1(conexion):
+    """Incorpora observaciones sin alterar los comprobantes ya guardados."""
+    conexion.execute("""CREATE TABLE IF NOT EXISTS importaciones (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             fecha_importacion TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
             archivo_origen TEXT NOT NULL,
+            sha256 TEXT NOT NULL DEFAULT '',
             cliente TEXT NOT NULL DEFAULT '', periodo TEXT NOT NULL DEFAULT '',
             aceptados INTEGER NOT NULL DEFAULT 0, rechazados INTEGER NOT NULL DEFAULT 0,
             cantidad_ventas INTEGER NOT NULL DEFAULT 0, total_centavos INTEGER NOT NULL DEFAULT 0
         )""")
-        columnas = {r[1] for r in conexion.execute("PRAGMA table_info(importaciones)")}
-        for nombre, tipo in (("cliente", "TEXT NOT NULL DEFAULT ''"), ("periodo", "TEXT NOT NULL DEFAULT ''"), ("aceptados", "INTEGER NOT NULL DEFAULT 0"), ("rechazados", "INTEGER NOT NULL DEFAULT 0")):
-            if nombre not in columnas:
-                conexion.execute(f"ALTER TABLE importaciones ADD COLUMN {nombre} {tipo}")
-        conexion.execute("""CREATE TABLE IF NOT EXISTS comprobantes (
+    columnas = {r[1] for r in conexion.execute("PRAGMA table_info(importaciones)")}
+    for nombre, tipo in (("cliente", "TEXT NOT NULL DEFAULT ''"), ("periodo", "TEXT NOT NULL DEFAULT ''"),
+                         ("aceptados", "INTEGER NOT NULL DEFAULT 0"), ("rechazados", "INTEGER NOT NULL DEFAULT 0"),
+                         ("sha256", "TEXT NOT NULL DEFAULT ''")):
+        if nombre not in columnas:
+            conexion.execute(f"ALTER TABLE importaciones ADD COLUMN {nombre} {tipo}")
+    conexion.execute("""CREATE TABLE IF NOT EXISTS comprobantes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             importacion_id INTEGER NOT NULL REFERENCES importaciones(id),
             cliente TEXT NOT NULL, periodo TEXT NOT NULL, operacion TEXT NOT NULL,
@@ -49,21 +73,21 @@ def crear_tabla(ruta=None):
             detalle_alicuotas_json TEXT NOT NULL DEFAULT '[]',
             UNIQUE(cliente, periodo, operacion, tipo_comprobante, punto_venta, numero, cuit)
         )""")
-        columnas_comprobantes = {r[1] for r in conexion.execute("PRAGMA table_info(comprobantes)")}
-        migraciones = {
-            "moneda": "TEXT NOT NULL DEFAULT 'ARS'",
-            "tipo_cambio": "REAL NOT NULL DEFAULT 1",
-            "neto_gravado_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
-            "iva_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
-            "no_gravado_exento_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
-            "percepciones_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
-            "total_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
-            "detalle_alicuotas_json": "TEXT NOT NULL DEFAULT '[]'",
-        }
-        for nombre, tipo in migraciones.items():
-            if nombre not in columnas_comprobantes:
-                conexion.execute(f"ALTER TABLE comprobantes ADD COLUMN {nombre} {tipo}")
-        conexion.execute("""UPDATE comprobantes SET
+    columnas_comprobantes = {r[1] for r in conexion.execute("PRAGMA table_info(comprobantes)")}
+    migraciones = {
+        "moneda": "TEXT NOT NULL DEFAULT 'ARS'",
+        "tipo_cambio": "REAL NOT NULL DEFAULT 1",
+        "neto_gravado_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+        "iva_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+        "no_gravado_exento_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+        "percepciones_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+        "total_origen_centavos": "INTEGER NOT NULL DEFAULT 0",
+        "detalle_alicuotas_json": "TEXT NOT NULL DEFAULT '[]'",
+    }
+    for nombre, tipo in migraciones.items():
+        if nombre not in columnas_comprobantes:
+            conexion.execute(f"ALTER TABLE comprobantes ADD COLUMN {nombre} {tipo}")
+    conexion.execute("""UPDATE comprobantes SET
             neto_gravado_origen_centavos = neto_gravado_centavos,
             iva_origen_centavos = iva_centavos,
             no_gravado_exento_origen_centavos = no_gravado_exento_centavos,
@@ -72,34 +96,45 @@ def crear_tabla(ruta=None):
             WHERE neto_gravado_origen_centavos = 0 AND iva_origen_centavos = 0
               AND no_gravado_exento_origen_centavos = 0 AND percepciones_origen_centavos = 0
               AND total_origen_centavos = 0 AND moneda = 'ARS'""")
-        conexion.commit()
-    except Exception:
-        conexion.rollback()
-        raise
-    finally:
-        conexion.close()
+    conexion.execute("""CREATE TABLE IF NOT EXISTS observaciones (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        importacion_id INTEGER NOT NULL REFERENCES importaciones(id),
+        fila_excel TEXT NOT NULL DEFAULT '', motivo TEXT NOT NULL,
+        datos_json TEXT NOT NULL DEFAULT '{}'
+    )""")
+    conexion.execute("CREATE INDEX IF NOT EXISTS idx_observaciones_importacion ON observaciones(importacion_id)")
 
 
 def _centavos(valor):
     return int(Decimal(str(valor)) * 100)
 
 
-def _reemplazar_periodo_en_conexion(conexion, cliente, periodo, comprobantes, rechazados, archivo_origen):
-    conexion.execute("DELETE FROM comprobantes WHERE cliente = ? AND periodo = ?", (cliente, periodo))
+def _valor_observado(valor):
+    if isinstance(valor, (dict, list, tuple)):
+        return json.dumps(valor, ensure_ascii=False, default=str)
+    if valor is None or pd.isna(valor):
+        return None
+    return str(valor)
+
+
+def _reemplazar_periodo_en_conexion(conexion, cliente, periodo, comprobantes, rechazados, archivo_origen,
+                                   sha256="", aplicar=True):
+    if aplicar:
+        conexion.execute("DELETE FROM comprobantes WHERE cliente = ? AND periodo = ?", (cliente, periodo))
     columnas_importacion = {r[1] for r in conexion.execute("PRAGMA table_info(importaciones)")}
-    campos = ["archivo_origen", "cliente", "periodo", "aceptados", "rechazados"]
-    valores = [archivo_origen, cliente, periodo, len(comprobantes), len(rechazados)]
+    campos = ["archivo_origen", "sha256", "cliente", "periodo", "aceptados", "rechazados"]
+    valores = [archivo_origen, sha256, cliente, periodo, len(comprobantes) if aplicar else 0, len(rechazados)]
     if "cantidad_ventas" in columnas_importacion:
         campos.append("cantidad_ventas")
-        valores.append(len(comprobantes))
+        valores.append(len(comprobantes) if aplicar else 0)
     if "total_centavos" in columnas_importacion:
         campos.append("total_centavos")
-        valores.append(sum(_centavos(x) for x in comprobantes.get("total", [])))
+        valores.append(sum(_centavos(x) for x in comprobantes.get("total", [])) if aplicar else 0)
     sql = f"INSERT INTO importaciones({', '.join(campos)}) VALUES ({', '.join('?' for _ in campos)})"
     cur = conexion.execute(sql, valores)
     importacion_id = cur.lastrowid
     registros = []
-    for fila in comprobantes.to_dict("records"):
+    for fila in (comprobantes.to_dict("records") if aplicar else []):
         registros.append((
             importacion_id, cliente, periodo, fila["operacion"], fila["fecha"],
             fila["tipo_comprobante"], int(fila["punto_venta"]), int(fila["numero"]),
@@ -124,6 +159,21 @@ def _reemplazar_periodo_en_conexion(conexion, cliente, periodo, comprobantes, re
         no_gravado_exento_origen_centavos, percepciones_origen_centavos,
         total_origen_centavos, detalle_alicuotas_json
     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""", registros)
+    observaciones = []
+    for fila in rechazados.to_dict("records"):
+        datos = {str(clave): _valor_observado(valor) for clave, valor in fila.items()
+                 if clave not in {"fila_excel", "motivo", "cliente"}}
+        numero_fila = fila.get("fila_excel")
+        observaciones.append((
+            importacion_id,
+            _valor_observado(numero_fila) or "",
+            str(fila.get("motivo", "")),
+            json.dumps(datos, ensure_ascii=False),
+        ))
+    conexion.executemany(
+        "INSERT INTO observaciones(importacion_id, fila_excel, motivo, datos_json) VALUES (?, ?, ?, ?)",
+        observaciones,
+    )
     return importacion_id
 
 
@@ -140,6 +190,8 @@ def reemplazar_periodos(importaciones, ruta=None):
                 item["comprobantes"],
                 item["rechazados"],
                 item["archivo_origen"],
+                item.get("sha256", ""),
+                item.get("aplicar", True),
             )
             for item in importaciones
         ]
@@ -222,5 +274,39 @@ def consultar_importaciones(ruta=None):
     conexion = conectar_bd(ruta)
     try:
         return pd.read_sql_query("SELECT * FROM importaciones ORDER BY id DESC", conexion)
+    finally:
+        conexion.close()
+
+
+def consultar_observaciones(ruta=None, periodo=None, importacion_id=None):
+    """Lee las observaciones de una importación o las vigentes de un período."""
+    conexion = conectar_bd(ruta)
+    try:
+        consulta = """SELECT i.id AS importacion_id, i.cliente, i.periodo, i.archivo_origen,
+            o.fila_excel, o.motivo, o.datos_json
+            FROM observaciones o JOIN importaciones i ON i.id = o.importacion_id"""
+        condiciones = []
+        params = []
+        if importacion_id is not None:
+            condiciones.append("i.id = ?")
+            params.append(importacion_id)
+        else:
+            condiciones.append(
+                "i.id = (SELECT MAX(id) FROM importaciones WHERE cliente = i.cliente AND periodo = i.periodo)"
+            )
+        if periodo is not None:
+            condiciones.append("i.periodo = ?")
+            params.append(periodo)
+        consulta += " WHERE " + " AND ".join(condiciones) + " ORDER BY i.cliente, o.id"
+        filas = conexion.execute(consulta, params).fetchall()
+        columnas = ("importacion_id", "cliente", "periodo", "archivo_origen", "fila_excel", "motivo", "datos_json")
+        resultado = []
+        for fila in filas:
+            registro = dict(zip(columnas, fila))
+            datos = json.loads(registro.pop("datos_json"))
+            registro = {**datos, **registro}
+            resultado.append(registro)
+        extras = sorted({clave for registro in resultado for clave in registro if clave not in columnas})
+        return pd.DataFrame(resultado, columns=[*columnas[:-1], *extras])
     finally:
         conexion.close()
