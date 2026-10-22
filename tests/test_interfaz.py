@@ -32,7 +32,7 @@ class TestInterfaz(unittest.TestCase):
 
             self.assertFalse(app.exception)
             self.assertTrue(any(
-                "Base SQLite migrada de versión 1 a 2" in item.value
+                "Base SQLite migrada de versión 1 a 3" in item.value
                 and str(Path(carpeta) / "legacy.v1.bak.db") in item.value
                 for item in app.info
             ))

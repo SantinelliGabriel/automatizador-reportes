@@ -37,7 +37,7 @@ class TestConsola(unittest.TestCase):
                 ])
             self.assertEqual(codigo, 0)
             self.assertTrue(any(
-                "Base SQLite migrada de versión 1 a 2" in linea
+                "Base SQLite migrada de versión 1 a 3" in linea
                 and str(carpeta / "legacy.v1.bak.db") in linea
                 for linea in registros.output
             ))

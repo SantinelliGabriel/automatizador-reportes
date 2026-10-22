@@ -11,9 +11,10 @@ import pandas as pd
 
 from automatizador.config import ARCHIVO_BD
 from automatizador.decimales import convertir_a_ars, normalizar_decimal
+from automatizador.lotes import operaciones_aceptadas, resolver_conflictos
 
 
-VERSION_ESQUEMA = 2
+VERSION_ESQUEMA = 3
 CENTAVOS = Decimal("0.01")
 COLUMNAS_IMPORTES = ("neto_gravado", "iva", "no_gravado_exento", "percepciones", "total")
 
@@ -63,8 +64,14 @@ def crear_tabla(ruta=None):
             _migrar_a_v2(conexion)
             conexion.execute("PRAGMA user_version = 2")
             conexion.commit()
-            if respaldo is not None:
-                return MigracionBase(version_anterior, VERSION_ESQUEMA, respaldo)
+            version = 2
+        if version == 2:
+            conexion.execute("BEGIN IMMEDIATE")
+            _migrar_a_v3(conexion)
+            conexion.execute("PRAGMA user_version = 3")
+            conexion.commit()
+        if respaldo is not None:
+            return MigracionBase(version_anterior, VERSION_ESQUEMA, respaldo)
     except Exception:
         conexion.rollback()
         raise
@@ -210,6 +217,20 @@ def _migrar_a_v2(conexion):
     conexion.execute("ALTER TABLE comprobantes_v2 RENAME TO comprobantes")
 
 
+def _migrar_a_v3(conexion):
+    """Registra las operaciones conocidas de cada importación histórica."""
+    conexion.execute("ALTER TABLE importaciones ADD COLUMN operaciones TEXT NOT NULL DEFAULT ''")
+    ids = conexion.execute("SELECT id FROM importaciones ORDER BY id").fetchall()
+    for (importacion_id,) in ids:
+        operaciones = sorted({fila[0] for fila in conexion.execute(
+            "SELECT DISTINCT operacion FROM comprobantes WHERE importacion_id = ?", (importacion_id,)
+        )})
+        conexion.execute(
+            "UPDATE importaciones SET operaciones = ? WHERE id = ?",
+            (",".join(operaciones), importacion_id),
+        )
+
+
 def _centavos(valor):
     if isinstance(valor, float):
         raise ValueError("El importe debe llegar como Decimal o texto, no como float.")
@@ -235,11 +256,16 @@ def _valor_observado(valor):
 
 def _reemplazar_periodo_en_conexion(conexion, cliente, periodo, comprobantes, rechazados, archivo_origen,
                                    sha256="", aplicar=True):
-    if aplicar:
-        conexion.execute("DELETE FROM comprobantes WHERE cliente = ? AND periodo = ?", (cliente, periodo))
+    operaciones = operaciones_aceptadas({"comprobantes": comprobantes})
+    if aplicar and operaciones:
+        conexion.executemany(
+            "DELETE FROM comprobantes WHERE cliente = ? AND periodo = ? AND operacion = ?",
+            [(cliente, periodo, operacion) for operacion in operaciones],
+        )
     columnas_importacion = {r[1] for r in conexion.execute("PRAGMA table_info(importaciones)")}
-    campos = ["archivo_origen", "sha256", "cliente", "periodo", "aceptados", "rechazados"]
-    valores = [archivo_origen, sha256, cliente, periodo, len(comprobantes) if aplicar else 0, len(rechazados)]
+    campos = ["archivo_origen", "sha256", "cliente", "periodo", "aceptados", "rechazados", "operaciones"]
+    valores = [archivo_origen, sha256, cliente, periodo, len(comprobantes) if aplicar else 0,
+               len(rechazados), ",".join(operaciones)]
     if "cantidad_ventas" in columnas_importacion:
         campos.append("cantidad_ventas")
         valores.append(len(comprobantes) if aplicar else 0)
@@ -295,6 +321,7 @@ def _reemplazar_periodo_en_conexion(conexion, cliente, periodo, comprobantes, re
 
 def reemplazar_periodos(importaciones, ruta=None):
     """Aplica varios reemplazos en una única transacción SQLite."""
+    importaciones = resolver_conflictos(importaciones)
     conexion = conectar_bd(ruta)
     try:
         conexion.execute("BEGIN IMMEDIATE")
@@ -401,30 +428,60 @@ def consultar_observaciones(ruta=None, periodo=None, importacion_id=None):
     conexion = conectar_bd(ruta)
     try:
         consulta = """SELECT i.id AS importacion_id, i.cliente, i.periodo, i.archivo_origen,
-            o.fila_excel, o.motivo, o.datos_json
+            o.fila_excel, o.motivo, o.datos_json, i.operaciones
             FROM observaciones o JOIN importaciones i ON i.id = o.importacion_id"""
         condiciones = []
         params = []
         if importacion_id is not None:
             condiciones.append("i.id = ?")
             params.append(importacion_id)
-        else:
-            condiciones.append(
-                "i.id = (SELECT MAX(id) FROM importaciones WHERE cliente = i.cliente AND periodo = i.periodo)"
-            )
         if periodo is not None:
             condiciones.append("i.periodo = ?")
             params.append(periodo)
-        consulta += " WHERE " + " AND ".join(condiciones) + " ORDER BY i.cliente, o.id"
+        if condiciones:
+            consulta += " WHERE " + " AND ".join(condiciones)
+        consulta += " ORDER BY i.cliente, o.id"
         filas = conexion.execute(consulta, params).fetchall()
-        columnas = ("importacion_id", "cliente", "periodo", "archivo_origen", "fila_excel", "motivo", "datos_json")
+        columnas = ("importacion_id", "cliente", "periodo", "archivo_origen", "fila_excel", "motivo",
+                    "datos_json", "operaciones")
+        filas_importacion = conexion.execute(
+            "SELECT id, cliente, periodo, operaciones FROM importaciones" +
+            (" WHERE periodo = ?" if periodo is not None else "") + " ORDER BY id",
+            (periodo,) if periodo is not None else (),
+        ).fetchall() if importacion_id is None else []
+        operaciones_por_id = {identificador: set(operaciones.split(",")) - {""}
+                             for identificador, _, _, operaciones in filas_importacion}
+        for fila in filas:
+            identificador = fila[0]
+            if identificador in operaciones_por_id:
+                operacion = json.loads(fila[6]).get("operacion")
+                if operacion in {"ventas", "compras"}:
+                    operaciones_por_id[identificador].add(operacion)
+        ultimas = {}
+        ultimas_sin_operacion = {}
+        for identificador, cliente, mes, _ in filas_importacion:
+            for operacion in operaciones_por_id[identificador]:
+                ultimas[cliente, mes, operacion] = identificador
+            ultimas_sin_operacion[cliente, mes] = identificador
         resultado = []
         for fila in filas:
             registro = dict(zip(columnas, fila))
             datos = json.loads(registro.pop("datos_json"))
+            registro.pop("operaciones")
+            if importacion_id is None:
+                clave = (registro["cliente"], registro["periodo"])
+                operacion = datos.get("operacion")
+                if operacion in {"ventas", "compras"}:
+                    vigente = ultimas.get((*clave, operacion)) == registro["importacion_id"]
+                else:
+                    vigente = (registro["importacion_id"] in {
+                        ultimas.get((*clave, op)) for op in operaciones_por_id[registro["importacion_id"]]
+                    } or ultimas_sin_operacion.get(clave) == registro["importacion_id"])
+                if not vigente:
+                    continue
             registro = {**datos, **registro}
             resultado.append(registro)
         extras = sorted({clave for registro in resultado for clave in registro if clave not in columnas})
-        return pd.DataFrame(resultado, columns=[*columnas[:-1], *extras])
+        return pd.DataFrame(resultado, columns=[*columnas[:-2], *extras])
     finally:
         conexion.close()
