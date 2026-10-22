@@ -17,6 +17,46 @@ from tests.helpers import comprobante, directorio_temporal
 
 
 class TestRepositorioSQLite(unittest.TestCase):
+    def test_ventas_luego_compras_del_mismo_cliente_periodo_reemplaza_ventas(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
+            for operacion, numero in (("ventas", 1), ("compras", 2)):
+                aceptados, rechazados = validar_comprobantes(pd.DataFrame([
+                    comprobante(numero=numero, operacion=operacion),
+                ]), "2026-09")
+                repo.reemplazar_periodos([{
+                    "cliente": "Cliente Sintético", "periodo": "2026-09",
+                    "comprobantes": aceptados, "rechazados": rechazados,
+                    "archivo_origen": f"{operacion}.csv",
+                }])
+
+            actuales = repo.consultar_comprobantes("2026-09")
+            self.assertEqual(actuales[["operacion", "numero"]].values.tolist(), [["compras", 2]])
+            self.assertEqual(repo.consultar_importaciones()["archivo_origen"].tolist(), [
+                "compras.csv", "ventas.csv",
+            ])
+
+    def test_dos_archivos_del_mismo_cliente_periodo_en_un_lote_dejan_solo_el_ultimo(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
+            lotes = []
+            for operacion, numero in (("ventas", 1), ("compras", 2)):
+                aceptados, rechazados = validar_comprobantes(pd.DataFrame([
+                    comprobante(numero=numero, operacion=operacion),
+                ]), "2026-09")
+                lotes.append({
+                    "cliente": "Cliente Sintético", "periodo": "2026-09",
+                    "comprobantes": aceptados, "rechazados": rechazados,
+                    "archivo_origen": f"{operacion}.csv",
+                })
+
+            ids = repo.reemplazar_periodos(lotes)
+
+            self.assertEqual(len(ids), 2)
+            actuales = repo.consultar_comprobantes("2026-09")
+            self.assertEqual(actuales[["operacion", "numero"]].values.tolist(), [["compras", 2]])
+            self.assertEqual(len(repo.consultar_importaciones()), 2)
+
     def test_excel_compuesto_y_regenerado_tienen_mismas_hojas_y_celdas(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)
