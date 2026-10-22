@@ -2,6 +2,7 @@
 
 import sqlite3
 import json
+import shutil
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
@@ -37,6 +38,8 @@ def conectar_bd(ruta=None):
 
 
 def crear_tabla(ruta=None):
+    ruta = Path(ruta or ARCHIVO_BD)
+    existia = ruta.is_file()
     conexion = conectar_bd(ruta)
     try:
         version = conexion.execute("PRAGMA user_version").fetchone()[0]
@@ -45,6 +48,10 @@ def crear_tabla(ruta=None):
         if version == VERSION_ESQUEMA:
             return
         version_anterior = version
+        habia_tablas = existia and conexion.execute(
+            "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%' LIMIT 1"
+        ).fetchone() is not None
+        respaldo = _crear_respaldo(ruta, version) if habia_tablas else None
         if version == 0:
             conexion.execute("BEGIN IMMEDIATE")
             _migrar_a_v1(conexion)
@@ -52,12 +59,12 @@ def crear_tabla(ruta=None):
             conexion.commit()
             version = 1
         if version == 1:
-            respaldo = _crear_respaldo(conexion, ruta or ARCHIVO_BD)
             conexion.execute("BEGIN IMMEDIATE")
             _migrar_a_v2(conexion)
             conexion.execute("PRAGMA user_version = 2")
             conexion.commit()
-            return MigracionBase(version_anterior, VERSION_ESQUEMA, respaldo)
+            if respaldo is not None:
+                return MigracionBase(version_anterior, VERSION_ESQUEMA, respaldo)
     except Exception:
         conexion.rollback()
         raise
@@ -133,27 +140,23 @@ def _migrar_a_v1(conexion):
     conexion.execute("CREATE INDEX IF NOT EXISTS idx_observaciones_importacion ON observaciones(importacion_id)")
 
 
-def _crear_respaldo(conexion, ruta):
+def _crear_respaldo(ruta, version):
     ruta = Path(ruta)
     indice = 0
     while True:
         sufijo = "" if indice == 0 else f".{indice}"
-        respaldo = ruta.with_name(f"{ruta.stem}.v1.bak{sufijo}.db")
+        respaldo = ruta.with_name(f"{ruta.stem}.v{version}.bak{sufijo}.db")
         try:
-            with respaldo.open("xb"):
-                pass
+            with ruta.open("rb") as origen, respaldo.open("xb") as destino:
+                try:
+                    shutil.copyfileobj(origen, destino)
+                except Exception:
+                    destino.close()
+                    respaldo.unlink()
+                    raise
             break
         except FileExistsError:
             indice += 1
-    try:
-        respaldo_conexion = sqlite3.connect(respaldo)
-        try:
-            conexion.backup(respaldo_conexion)
-        finally:
-            respaldo_conexion.close()
-    except Exception:
-        respaldo.unlink()
-        raise
     return respaldo
 
 

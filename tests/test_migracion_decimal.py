@@ -9,7 +9,7 @@ from unittest.mock import patch
 
 import pandas as pd
 
-from automatizador.database import VERSION_ESQUEMA, _migrar_a_v2, crear_tabla
+from automatizador.database import VERSION_ESQUEMA, _migrar_a_v1, _migrar_a_v2, crear_tabla
 from automatizador.procesamiento import generar_informe
 from automatizador.repositorio import RepositorioSQLite
 from tests.helpers import comprobante, directorio_temporal
@@ -17,11 +17,10 @@ from tests.helpers import comprobante, directorio_temporal
 
 def base_v1(carpeta):
     carpeta = Path(carpeta)
-    nueva = carpeta / "nueva.db"
-    crear_tabla(nueva)
     vieja = carpeta / "legacy.db"
-    shutil.copy2(carpeta / "nueva.v1.bak.db", vieja)
     with closing(sqlite3.connect(vieja)) as conexion:
+        _migrar_a_v1(conexion)
+        conexion.execute("PRAGMA user_version = 1")
         conexion.execute(
             "INSERT INTO importaciones(archivo_origen, cliente, periodo, aceptados) VALUES (?, ?, ?, ?)",
             ("sintetico.csv", "Cliente Sintético", "2026-09", 3),
@@ -47,6 +46,14 @@ def base_v1(carpeta):
     return vieja
 
 
+def base_v0_main(carpeta):
+    ruta = Path(carpeta) / "main_v0.db"
+    sql = (Path(__file__).parent / "fixtures" / "sqlite" / "main_v0_sintetica.sql").read_text(encoding="utf-8")
+    with closing(sqlite3.connect(ruta)) as conexion:
+        conexion.executescript(sql)
+    return ruta
+
+
 def instantanea(ruta):
     with closing(sqlite3.connect(ruta)) as conexion:
         return (
@@ -60,6 +67,34 @@ def instantanea(ruta):
 
 
 class TestMigracionDecimal(unittest.TestCase):
+    def test_base_nueva_y_archivo_vacio_no_generan_respaldo_ni_aviso(self):
+        with directorio_temporal() as carpeta:
+            nueva = Path(carpeta) / "nueva.db"
+            self.assertIsNone(crear_tabla(nueva))
+            self.assertEqual(list(Path(carpeta).glob("*.bak*.db")), [])
+            vacia = Path(carpeta) / "vacia.db"
+            vacia.touch()
+            self.assertIsNone(crear_tabla(vacia))
+            self.assertEqual(list(Path(carpeta).glob("*.bak*.db")), [])
+
+    def test_base_v0_de_main_respalda_bytes_originales_antes_de_migrar(self):
+        with directorio_temporal() as carpeta:
+            base = base_v0_main(carpeta)
+            original = base.read_bytes()
+            with closing(sqlite3.connect(base)) as conexion:
+                self.assertEqual(conexion.execute("PRAGMA user_version").fetchone()[0], 0)
+                self.assertEqual(conexion.execute("SELECT COUNT(*) FROM comprobantes").fetchone()[0], 3)
+
+            migracion = crear_tabla(base)
+
+            respaldo = Path(carpeta) / "main_v0.v0.bak.db"
+            self.assertEqual(migracion.version_anterior, 0)
+            self.assertEqual(migracion.respaldo, respaldo)
+            self.assertEqual(respaldo.read_bytes(), original)
+            with closing(sqlite3.connect(base)) as conexion:
+                self.assertEqual(conexion.execute("PRAGMA user_version").fetchone()[0], VERSION_ESQUEMA)
+                self.assertEqual(conexion.execute("SELECT COUNT(*) FROM comprobantes").fetchone()[0], 3)
+
     def test_version_futura_falla_sin_modificar_base_ni_crear_respaldo(self):
         with directorio_temporal() as carpeta:
             base = base_v1(carpeta)
