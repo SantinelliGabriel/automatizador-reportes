@@ -2,14 +2,18 @@
 
 import sqlite3
 import json
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
+from pathlib import Path
 
 import pandas as pd
 
 from automatizador.config import ARCHIVO_BD
+from automatizador.decimales import normalizar_decimal
 
 
-VERSION_ESQUEMA = 1
+VERSION_ESQUEMA = 2
+CENTAVOS = Decimal("0.01")
+COLUMNAS_IMPORTES = ("neto_gravado", "iva", "no_gravado_exento", "percepciones", "total")
 
 
 def conectar_bd(ruta=None):
@@ -26,10 +30,18 @@ def crear_tabla(ruta=None):
             raise ValueError(f"La base usa una versión de esquema no admitida: {version}")
         if version == VERSION_ESQUEMA:
             return
-        conexion.execute("BEGIN IMMEDIATE")
-        _migrar_a_v1(conexion)
-        conexion.execute(f"PRAGMA user_version = {VERSION_ESQUEMA}")
-        conexion.commit()
+        if version == 0:
+            conexion.execute("BEGIN IMMEDIATE")
+            _migrar_a_v1(conexion)
+            conexion.execute("PRAGMA user_version = 1")
+            conexion.commit()
+            version = 1
+        if version == 1:
+            _crear_respaldo(conexion, ruta or ARCHIVO_BD)
+            conexion.execute("BEGIN IMMEDIATE")
+            _migrar_a_v2(conexion)
+            conexion.execute("PRAGMA user_version = 2")
+            conexion.commit()
     except Exception:
         conexion.rollback()
         raise
@@ -105,6 +117,74 @@ def _migrar_a_v1(conexion):
     conexion.execute("CREATE INDEX IF NOT EXISTS idx_observaciones_importacion ON observaciones(importacion_id)")
 
 
+def _crear_respaldo(conexion, ruta):
+    ruta = Path(ruta)
+    indice = 0
+    while True:
+        sufijo = "" if indice == 0 else f".{indice}"
+        respaldo = ruta.with_name(f"{ruta.stem}.v1.bak{sufijo}.db")
+        if not respaldo.exists():
+            break
+        indice += 1
+    respaldo_conexion = sqlite3.connect(respaldo)
+    try:
+        conexion.backup(respaldo_conexion)
+    finally:
+        respaldo_conexion.close()
+    return respaldo
+
+
+def _migrar_a_v2(conexion):
+    """Recrea comprobantes con tasas como texto y copia centavos sin recalcularlos."""
+    conexion.execute("""CREATE TABLE comprobantes_v2 (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        importacion_id INTEGER NOT NULL REFERENCES importaciones(id),
+        cliente TEXT NOT NULL, periodo TEXT NOT NULL, operacion TEXT NOT NULL,
+        fecha TEXT NOT NULL, tipo_comprobante TEXT NOT NULL,
+        punto_venta INTEGER NOT NULL, numero INTEGER NOT NULL,
+        cuit TEXT NOT NULL, razon_social TEXT NOT NULL,
+        neto_gravado_centavos INTEGER NOT NULL, alicuota TEXT NOT NULL,
+        iva_centavos INTEGER NOT NULL, no_gravado_exento_centavos INTEGER NOT NULL,
+        percepciones_centavos INTEGER NOT NULL, total_centavos INTEGER NOT NULL,
+        moneda TEXT NOT NULL DEFAULT 'ARS', tipo_cambio TEXT NOT NULL DEFAULT '1',
+        neto_gravado_origen_centavos INTEGER NOT NULL DEFAULT 0,
+        iva_origen_centavos INTEGER NOT NULL DEFAULT 0,
+        no_gravado_exento_origen_centavos INTEGER NOT NULL DEFAULT 0,
+        percepciones_origen_centavos INTEGER NOT NULL DEFAULT 0,
+        total_origen_centavos INTEGER NOT NULL DEFAULT 0,
+        detalle_alicuotas_json TEXT NOT NULL DEFAULT '[]',
+        revision_decimal TEXT NOT NULL DEFAULT '',
+        UNIQUE(cliente, periodo, operacion, tipo_comprobante, punto_venta, numero, cuit)
+    )""")
+    columnas = [fila[1] for fila in conexion.execute("PRAGMA table_info(comprobantes)")]
+    consulta = "SELECT " + ", ".join(columnas) + " FROM comprobantes ORDER BY id"
+    nuevas_columnas = [*columnas, "revision_decimal"]
+    insertar = (
+        "INSERT INTO comprobantes_v2 (" + ", ".join(nuevas_columnas) + ") VALUES ("
+        + ", ".join("?" for _ in nuevas_columnas) + ")"
+    )
+    for fila in conexion.execute(consulta):
+        datos = dict(zip(columnas, fila))
+        alicuota = Decimal(repr(datos["alicuota"]))
+        tipo_cambio = Decimal(repr(datos["tipo_cambio"]))
+        datos["alicuota"] = normalizar_decimal(alicuota, "alicuota", validar_escala=False)
+        datos["tipo_cambio"] = normalizar_decimal(tipo_cambio, "tipo_cambio", validar_escala=False)
+        revision = []
+        if any(len(valor.normalize().as_tuple().digits) > 15 for valor in (alicuota, tipo_cambio)):
+            revision.append("más de 15 cifras significativas")
+        if any(
+            (Decimal(datos[f"{campo}_origen_centavos"]).scaleb(-2) * tipo_cambio)
+            .quantize(CENTAVOS, rounding=ROUND_HALF_UP)
+            != Decimal(datos[f"{campo}_centavos"]).scaleb(-2)
+            for campo in COLUMNAS_IMPORTES
+        ):
+            revision.append("conversión a ARS diferente")
+        datos["revision_decimal"] = "; ".join(revision)
+        conexion.execute(insertar, [datos[columna] for columna in nuevas_columnas])
+    conexion.execute("DROP TABLE comprobantes")
+    conexion.execute("ALTER TABLE comprobantes_v2 RENAME TO comprobantes")
+
+
 def _centavos(valor):
     return int(Decimal(str(valor)) * 100)
 
@@ -139,16 +219,16 @@ def _reemplazar_periodo_en_conexion(conexion, cliente, periodo, comprobantes, re
             importacion_id, cliente, periodo, fila["operacion"], fila["fecha"],
             fila["tipo_comprobante"], int(fila["punto_venta"]), int(fila["numero"]),
             fila["cuit"], fila["razon_social"], _centavos(fila["neto_gravado"]),
-            float(fila["alicuota"]), _centavos(fila["iva"]),
+            normalizar_decimal(fila["alicuota"], "alicuota"), _centavos(fila["iva"]),
             _centavos(fila["no_gravado_exento"]), _centavos(fila["percepciones"]),
             _centavos(fila["total"]), fila.get("moneda", "ARS"),
-            float(fila.get("tipo_cambio", 1)),
+            normalizar_decimal(fila.get("tipo_cambio", 1), "tipo_cambio"),
             _centavos(fila.get("neto_gravado_origen", fila["neto_gravado"])),
             _centavos(fila.get("iva_origen", fila["iva"])),
             _centavos(fila.get("no_gravado_exento_origen", fila["no_gravado_exento"])),
             _centavos(fila.get("percepciones_origen", fila["percepciones"])),
             _centavos(fila.get("total_origen", fila["total"])),
-            json.dumps(fila.get("detalle_alicuotas", []), ensure_ascii=False),
+            json.dumps(fila.get("detalle_alicuotas", []), ensure_ascii=False, default=str),
         ))
     conexion.executemany("""INSERT INTO comprobantes(
         importacion_id, cliente, periodo, operacion, fecha, tipo_comprobante,
@@ -221,17 +301,12 @@ def consultar_comprobantes(ruta=None, periodo=None):
     try:
         consulta = """SELECT cliente, periodo, operacion, fecha, tipo_comprobante,
             punto_venta, numero, cuit, razon_social,
-            neto_gravado_centavos / 100.0 AS neto_gravado, alicuota,
-            iva_centavos / 100.0 AS iva,
-            no_gravado_exento_centavos / 100.0 AS no_gravado_exento,
-            percepciones_centavos / 100.0 AS percepciones,
-            total_centavos / 100.0 AS total, moneda, tipo_cambio,
-            neto_gravado_origen_centavos / 100.0 AS neto_gravado_origen,
-            iva_origen_centavos / 100.0 AS iva_origen,
-            no_gravado_exento_origen_centavos / 100.0 AS no_gravado_exento_origen,
-            percepciones_origen_centavos / 100.0 AS percepciones_origen,
-            total_origen_centavos / 100.0 AS total_origen,
-            detalle_alicuotas_json
+            neto_gravado_centavos, alicuota, iva_centavos,
+            no_gravado_exento_centavos, percepciones_centavos,
+            total_centavos, moneda, tipo_cambio,
+            neto_gravado_origen_centavos, iva_origen_centavos,
+            no_gravado_exento_origen_centavos, percepciones_origen_centavos,
+            total_origen_centavos, detalle_alicuotas_json, revision_decimal
             FROM comprobantes"""
         params = ()
         if periodo:
@@ -239,6 +314,13 @@ def consultar_comprobantes(ruta=None, periodo=None):
             params = (periodo,)
         consulta += " ORDER BY cliente, fecha, punto_venta, numero"
         resultado = pd.read_sql_query(consulta, conexion, params=params)
+        for campo in COLUMNAS_IMPORTES:
+            resultado[campo] = resultado.pop(f"{campo}_centavos").map(lambda valor: Decimal(int(valor)).scaleb(-2))
+            resultado[f"{campo}_origen"] = resultado.pop(f"{campo}_origen_centavos").map(
+                lambda valor: Decimal(int(valor)).scaleb(-2)
+            )
+        for campo in ("alicuota", "tipo_cambio"):
+            resultado[campo] = resultado[campo].map(lambda valor: Decimal(valor) if valor is not None else None)
         if "detalle_alicuotas_json" in resultado:
             resultado["detalle_alicuotas"] = resultado["detalle_alicuotas_json"].map(
                 lambda valor: json.loads(valor) if valor else []

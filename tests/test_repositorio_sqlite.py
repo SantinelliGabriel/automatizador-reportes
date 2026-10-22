@@ -7,15 +7,38 @@ from contextlib import closing
 from pathlib import Path
 
 import pandas as pd
+from openpyxl import load_workbook
 
 from automatizador.database import VERSION_ESQUEMA, crear_tabla
-from automatizador.procesamiento import confirmar_importacion, generar_informe, previsualizar
+from automatizador.procesamiento import confirmar_importacion, generar_informe, previsualizar, procesar
 from automatizador.repositorio import RepositorioSQLite
 from automatizador.validaciones import validar_comprobantes
 from tests.helpers import comprobante, directorio_temporal
 
 
 class TestRepositorioSQLite(unittest.TestCase):
+    def test_excel_compuesto_y_regenerado_tienen_mismas_hojas_y_celdas(self):
+        with directorio_temporal() as carpeta:
+            carpeta = Path(carpeta)
+            entrada = carpeta / "Cliente Sintético.csv"
+            pd.DataFrame([
+                comprobante(numero=1),
+                comprobante(numero=2, cuit="CUIT inválido"),
+            ]).to_csv(entrada, index=False)
+            base = carpeta / "comprobantes.db"
+            anterior = carpeta / "anterior.xlsx"
+            nuevo = carpeta / "regenerado.xlsx"
+            procesar(entrada, anterior, base, "2026-09")
+            generar_informe("2026-09", nuevo, RepositorioSQLite(base))
+
+            with closing(load_workbook(anterior, read_only=True, data_only=True)) as libro_anterior:
+                with closing(load_workbook(nuevo, read_only=True, data_only=True)) as libro_nuevo:
+                    self.assertEqual(libro_anterior.sheetnames, libro_nuevo.sheetnames)
+                    for nombre in libro_anterior.sheetnames:
+                        self.assertEqual(
+                            list(libro_anterior[nombre].values), list(libro_nuevo[nombre].values), nombre,
+                        )
+
     def test_confirma_observaciones_y_sha_sin_generar_excel_y_lo_regenera_sin_original(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)
