@@ -58,6 +58,8 @@ python -m venv .venv
 python -m pip install -e .
 automatizador --period 2026-09
 ```
+Opcional en PowerShell: si `Activate.ps1` está bloqueado, ejecutá `Set-ExecutionPolicy -Scope Process Bypass` antes de activar el entorno; el cambio dura solo esa sesión.
+
 macOS o Linux:
 ```bash
 python3 -m venv .venv
@@ -65,7 +67,7 @@ source .venv/bin/activate
 python -m pip install -e .
 automatizador --period 2026-09
 ```
-`automatizador-demo` crea dos archivos sintéticos en `datos_demo/`. Sin `--input`, la CLI usa `ejemplos/Cliente Demo Norte.xlsx`; genera `reporte_iva.xlsx` y `comprobantes.db` en el directorio actual. `--period` es obligatorio.
+Sin `--input`, la CLI usa `ejemplos/Cliente Demo Norte.xlsx`; genera `reporte_iva.xlsx` y `comprobantes.db` en el directorio actual. `--period` es obligatorio.
 
 Para procesar una carpeta con rutas explícitas, PowerShell:
 ```powershell
@@ -85,6 +87,8 @@ automatizador \
   --database resultados/comprobantes.db \
   --period 2026-09
 ```
+`automatizador-demo` crea dos archivos sintéticos en `datos_demo/`.
+
 Más detalles de [adaptadores ARCA/Holistor](docs/adaptadores.md).
 
 ## Flujo
