@@ -2,6 +2,7 @@
 
 import sqlite3
 import json
+from dataclasses import dataclass
 from decimal import Decimal, ROUND_HALF_UP
 from pathlib import Path
 
@@ -14,6 +15,19 @@ from automatizador.decimales import normalizar_decimal
 VERSION_ESQUEMA = 2
 CENTAVOS = Decimal("0.01")
 COLUMNAS_IMPORTES = ("neto_gravado", "iva", "no_gravado_exento", "percepciones", "total")
+
+
+@dataclass(frozen=True)
+class MigracionBase:
+    version_anterior: int
+    version_actual: int
+    respaldo: Path
+
+    def mensaje(self) -> str:
+        return (
+            f"Base SQLite migrada de versión {self.version_anterior} a {self.version_actual}. "
+            f"Respaldo: {self.respaldo}"
+        )
 
 
 def conectar_bd(ruta=None):
@@ -30,6 +44,7 @@ def crear_tabla(ruta=None):
             raise ValueError(f"La base usa una versión de esquema no admitida: {version}")
         if version == VERSION_ESQUEMA:
             return
+        version_anterior = version
         if version == 0:
             conexion.execute("BEGIN IMMEDIATE")
             _migrar_a_v1(conexion)
@@ -37,11 +52,12 @@ def crear_tabla(ruta=None):
             conexion.commit()
             version = 1
         if version == 1:
-            _crear_respaldo(conexion, ruta or ARCHIVO_BD)
+            respaldo = _crear_respaldo(conexion, ruta or ARCHIVO_BD)
             conexion.execute("BEGIN IMMEDIATE")
             _migrar_a_v2(conexion)
             conexion.execute("PRAGMA user_version = 2")
             conexion.commit()
+            return MigracionBase(version_anterior, VERSION_ESQUEMA, respaldo)
     except Exception:
         conexion.rollback()
         raise
@@ -123,14 +139,21 @@ def _crear_respaldo(conexion, ruta):
     while True:
         sufijo = "" if indice == 0 else f".{indice}"
         respaldo = ruta.with_name(f"{ruta.stem}.v1.bak{sufijo}.db")
-        if not respaldo.exists():
+        try:
+            with respaldo.open("xb"):
+                pass
             break
-        indice += 1
-    respaldo_conexion = sqlite3.connect(respaldo)
+        except FileExistsError:
+            indice += 1
     try:
-        conexion.backup(respaldo_conexion)
-    finally:
-        respaldo_conexion.close()
+        respaldo_conexion = sqlite3.connect(respaldo)
+        try:
+            conexion.backup(respaldo_conexion)
+        finally:
+            respaldo_conexion.close()
+    except Exception:
+        respaldo.unlink()
+        raise
     return respaldo
 
 

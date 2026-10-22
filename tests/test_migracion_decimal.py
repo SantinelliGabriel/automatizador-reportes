@@ -7,7 +7,11 @@ from contextlib import closing
 from pathlib import Path
 from unittest.mock import patch
 
+import pandas as pd
+
 from automatizador.database import VERSION_ESQUEMA, _migrar_a_v2, crear_tabla
+from automatizador.procesamiento import generar_informe
+from automatizador.repositorio import RepositorioSQLite
 from tests.helpers import comprobante, directorio_temporal
 
 
@@ -56,6 +60,46 @@ def instantanea(ruta):
 
 
 class TestMigracionDecimal(unittest.TestCase):
+    def test_version_futura_falla_sin_modificar_base_ni_crear_respaldo(self):
+        with directorio_temporal() as carpeta:
+            base = base_v1(carpeta)
+            with closing(sqlite3.connect(base)) as conexion:
+                conexion.execute(f"PRAGMA user_version = {VERSION_ESQUEMA + 1}")
+            antes = base.read_bytes()
+            with self.assertRaisesRegex(ValueError, f"versión de esquema no admitida: {VERSION_ESQUEMA + 1}"):
+                crear_tabla(base)
+            self.assertEqual(base.read_bytes(), antes)
+            self.assertEqual(list(Path(carpeta).glob("legacy.v1.bak*.db")), [])
+
+    def test_respaldo_existente_se_conserva_y_se_crea_otro(self):
+        with directorio_temporal() as carpeta:
+            base = base_v1(carpeta)
+            primero = Path(carpeta) / "legacy.v1.bak.db"
+            shutil.copy2(base, primero)
+            contenido_original = primero.read_bytes()
+
+            migracion = crear_tabla(base)
+
+            segundo = Path(carpeta) / "legacy.v1.bak.1.db"
+            self.assertEqual(primero.read_bytes(), contenido_original)
+            self.assertEqual(migracion.respaldo, segundo)
+            self.assertEqual(instantanea(segundo), (1, instantanea(primero)[1]))
+            self.assertIn(str(segundo), migracion.mensaje())
+
+    def test_revision_migrada_figura_en_hoja_comprobantes(self):
+        with directorio_temporal() as carpeta:
+            base = base_v1(carpeta)
+            crear_tabla(base)
+            salida = Path(carpeta) / "reporte.xlsx"
+            generar_informe("2026-09", salida, RepositorioSQLite(base))
+            detalle = pd.read_excel(salida, sheet_name="Comprobantes")
+            observaciones = pd.read_excel(salida, sheet_name="Observaciones")
+            motivos = dict(zip(detalle["numero"], detalle["revision_decimal"].fillna("")))
+            self.assertEqual(motivos[1], "")
+            self.assertIn("15 cifras significativas", motivos[2])
+            self.assertEqual(motivos[3], "conversión a ARS diferente")
+            self.assertTrue(observaciones.empty)
+
     def test_respaldo_revision_selectiva_centavos_intactos_e_idempotencia(self):
         with directorio_temporal() as carpeta:
             base = base_v1(carpeta)
