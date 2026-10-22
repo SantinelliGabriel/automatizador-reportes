@@ -163,6 +163,18 @@ class TestRepositorioSQLite(unittest.TestCase):
             }])
             self.assertEqual(repo.consultar_observaciones("2026-09")["operacion"].tolist(), ["compras"])
 
+    def test_observacion_sin_operacion_identificable_sigue_visible(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
+            aceptados, _ = validar_comprobantes(pd.DataFrame([comprobante(numero=1)]), "2026-09")
+            repo.reemplazar_periodos([{
+                "cliente": "Cliente Sintético", "periodo": "2026-09", "comprobantes": aceptados,
+                "rechazados": pd.DataFrame([{"fila_excel": 3, "motivo": "Registro sintético ilegible"}]),
+                "archivo_origen": "ventas.csv",
+            }])
+            observaciones = repo.consultar_observaciones("2026-09")
+            self.assertEqual(observaciones["motivo"].tolist(), ["Registro sintético ilegible"])
+
     def test_excel_compuesto_y_regenerado_tienen_mismas_hojas_y_celdas(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)

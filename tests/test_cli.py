@@ -9,6 +9,22 @@ from tests.test_migracion_decimal import base_v1
 
 
 class TestConsola(unittest.TestCase):
+    def test_informa_conflicto_de_operacion_en_lote(self):
+        with directorio_temporal() as carpeta:
+            carpeta = Path(carpeta)
+            entradas = carpeta / "entradas"
+            entradas.mkdir()
+            pd.DataFrame([comprobante(numero=1)]).to_csv(entradas / "Cliente Sintético.csv", index=False)
+            pd.DataFrame([comprobante(numero=2)]).to_excel(entradas / "Cliente Sintético.xlsx", index=False)
+            with self.assertLogs(level="INFO") as registros:
+                codigo = main([
+                    "--input", str(entradas), "--output", str(carpeta / "reporte.xlsx"),
+                    "--database", str(carpeta / "comprobantes.db"), "--period", "2026-09",
+                ])
+            self.assertEqual(codigo, 0)
+            self.assertTrue(any("Conflicto en el lote:" in linea for linea in registros.output))
+            self.assertTrue(any("Operaciones reemplazadas: ninguna" in linea for linea in registros.output))
+
     def test_base_nueva_no_anuncia_migracion_ni_crea_respaldo(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)

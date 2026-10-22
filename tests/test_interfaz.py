@@ -1,11 +1,14 @@
 import json
+import io
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import pandas as pd
 from streamlit.testing.v1 import AppTest
 
-from tests.helpers import ROOT
+from tests.helpers import ROOT, comprobante
 from tests.test_migracion_decimal import base_v1
 
 
@@ -15,6 +18,28 @@ def app_test(path):
 
 
 class TestInterfaz(unittest.TestCase):
+    def test_muestra_conflicto_entre_archivos_del_mismo_cliente(self):
+        csv = pd.DataFrame([comprobante(numero=1)]).to_csv(index=False).encode("utf-8")
+        excel = io.BytesIO()
+        pd.DataFrame([comprobante(numero=2)]).to_excel(excel, index=False)
+        with patch.dict("os.environ", {"AUTOMATIZADOR_DEMO": "0"}), tempfile.TemporaryDirectory(
+            dir=ROOT / ".test_tmp"
+        ) as carpeta:
+            app = app_test(ROOT / "automatizador" / "interfaz.py")
+            app.run()
+            app.text_input[1].set_value(str(Path(carpeta) / "comprobantes.db"))
+            app.text_input[0].set_value("2026-09")
+            app.file_uploader[0].set_value([
+                ("Cliente Sintético.csv", csv, "text/csv"),
+                ("Cliente Sintético.xlsx", excel.getvalue(),
+                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ])
+            app.run()
+            app.button[0].click()
+            app.run()
+            self.assertFalse(app.exception)
+            self.assertTrue(any("Conflicto en el lote:" in item.value for item in app.error))
+
     def test_avisa_migracion_y_ruta_del_respaldo(self):
         entrada = ROOT / "ejemplos" / "Cliente Demo Norte.xlsx"
         with tempfile.TemporaryDirectory(dir=ROOT / ".test_tmp") as carpeta:
