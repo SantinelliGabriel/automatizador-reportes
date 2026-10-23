@@ -47,6 +47,13 @@ jobs:
       - name: Check Django configuration
         run: python web/manage.py check
 
+      - name: Check Django deployment settings
+        env:
+          DJANGO_DEBUG: '0'
+          DJANGO_ALLOWED_HOSTS: example.test
+          DJANGO_SECRET_KEY: ci-deploy-synthetic-key-5b62e2e44c7848b0abfa0097815629a9
+        run: python web/manage.py check --deploy
+
       - name: Check Django migrations
         run: python web/manage.py makemigrations --check --dry-run
 
