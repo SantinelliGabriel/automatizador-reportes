@@ -2,12 +2,14 @@
 
 import sqlite3
 import unittest
+import unicodedata
 from contextlib import closing
 from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
 from django.db import IntegrityError
+from openpyxl import load_workbook
 
 from automatizador.procesamiento import generar_informe
 from automatizador.repositorio import RepositorioSQLite
@@ -151,10 +153,14 @@ class TestContratoRepositorios(unittest.TestCase):
             repo.reemplazar_periodos([lote("mixto.csv", comprobante(numero=1),
                                          comprobante(numero=2, operacion="compras"),
                                          comprobante(numero=3, cuit="CUIT sintético inválido"))])
-            lecturas[nombre] = (repo.consultar_comprobantes(PERIODO), repo.consultar_observaciones(PERIODO))
+            lecturas[nombre] = (repo.consultar_comprobantes(PERIODO), repo.consultar_observaciones(PERIODO),
+                                repo.consultar_importaciones())
         for sqlite, django in zip(lecturas["sqlite"], lecturas["django"]):
-            self.assertEqual(list(sqlite.columns), list(django.columns))
-            self.assertEqual(sqlite.to_dict("records"), django.to_dict("records"))
+            if "fecha_importacion" in sqlite:
+                # El instante real de cada ejecución es necesariamente distinto.
+                sqlite = sqlite.assign(fecha_importacion="instante sintético")
+                django = django.assign(fecha_importacion="instante sintético")
+            pd.testing.assert_frame_equal(sqlite, django, check_dtype=True, check_like=False)
 
     def test_historial_heredado_sin_operaciones(self):
         for nombre, repo, _ in repositorios():
@@ -179,6 +185,22 @@ class TestContratoRepositorios(unittest.TestCase):
                     self.assertEqual(list(DetalleAlicuota.objects.values_list(
                         "neto_gravado_centavos", "iva_centavos")), [(10000000, 2100000)])
 
+    def test_excel_generado_es_igual_con_ambos_repositorios(self):
+        libros = {}
+        for nombre, repo, carpeta in repositorios():
+            repo.reemplazar_periodos([lote(
+                "ejemplo.csv", comprobante(numero=1),
+                comprobante(numero=2, tipo_comprobante="NC A"),
+                comprobante(numero=3, tipo_comprobante="ND A"),
+                comprobante(numero=4, cuit="CUIT sintético inválido"),
+            )])
+            ruta = generar_informe(PERIODO, carpeta / "informe.xlsx", repo)
+            libro = load_workbook(ruta, data_only=True)
+            libros[nombre] = {hoja.title: tuple(tuple(celda.value for celda in fila)
+                                                 for fila in hoja) for hoja in libro.worksheets}
+            libro.close()
+        self.assertEqual(libros["sqlite"], libros["django"])
+
     def test_nombre_del_contrato_se_vincula_a_un_cliente_django(self):
         limpiar_bd()
         repo = RepositorioDjango()
@@ -186,3 +208,59 @@ class TestContratoRepositorios(unittest.TestCase):
         repo.reemplazar_periodos([lote("segundo.csv", comprobante(numero=2), cliente="CLIENTE SINTÉTICO")])
         self.assertEqual(Cliente.objects.count(), 1)
         self.assertEqual(repo.consultar_comprobantes(PERIODO)["numero"].tolist(), [2])
+
+    def test_variantes_de_cliente_conservan_primera_etiqueta_en_ambos_repositorios(self):
+        variantes = ["Cliente A", "cliente a", " Cliente  A "]
+        for backend, repo, _ in repositorios():
+            with self.subTest(backend=backend):
+                for numero, nombre in enumerate(variantes, 1):
+                    repo.reemplazar_periodos([lote(f"archivo-{numero}.csv", comprobante(numero=numero),
+                                                 cliente=nombre)])
+                comprobantes = repo.consultar_comprobantes(PERIODO)
+                self.assertEqual(comprobantes["numero"].tolist(), [3])
+                self.assertEqual(comprobantes["cliente"].tolist(), ["Cliente A"])
+                self.assertEqual(repo.consultar_importaciones()["cliente"].tolist(), ["Cliente A"] * 3)
+
+    def test_nfc_nfd_son_mismo_cliente_en_ambos_repositorios(self):
+        primero = "Cliente Á"
+        segundo = unicodedata.normalize("NFD", primero)
+        for backend, repo, _ in repositorios():
+            with self.subTest(backend=backend):
+                repo.reemplazar_periodos([lote("primero.csv", comprobante(numero=1), cliente=primero)])
+                repo.reemplazar_periodos([lote("segundo.csv", comprobante(numero=2), cliente=segundo)])
+                self.assertEqual(repo.consultar_comprobantes(PERIODO)["numero"].tolist(), [2])
+                self.assertEqual(repo.consultar_comprobantes(PERIODO)["cliente"].tolist(), [primero])
+
+    def test_variantes_del_mismo_cliente_compiten_en_el_mismo_lote(self):
+        for backend, repo, _ in repositorios():
+            with self.subTest(backend=backend):
+                repo.reemplazar_periodos([
+                    lote("a.csv", comprobante(numero=1), cliente="Cliente A"),
+                    lote("b.csv", comprobante(numero=2), cliente=" cliente  a "),
+                ])
+                self.assertTrue(repo.consultar_comprobantes(PERIODO).empty)
+                self.assertEqual(repo.consultar_importaciones()["estado"].tolist(),
+                                 ["no aplicada: conflicto"] * 2)
+
+    def test_sqlite_heredado_con_aliases_ambiguos_exige_migracion(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "heredado.db")
+            with closing(sqlite3.connect(repo.ruta)) as conexion:
+                conexion.executemany(
+                    "INSERT INTO importaciones (archivo_origen, cliente, periodo) VALUES (?, ?, ?)",
+                    [("primero.csv", "Cliente A", PERIODO), ("segundo.csv", "cliente a", PERIODO)],
+                )
+                conexion.commit()
+            with self.assertRaisesRegex(ValueError, "requieren una migración"):
+                repo.reemplazar_periodos([lote("nuevo.csv", comprobante(numero=1), cliente=" Cliente  A ")])
+            self.assertEqual(len(repo.consultar_importaciones()), 2)
+
+    def test_sqlite_heredado_con_cliente_vacio_no_bloquea_nuevas_importaciones(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "heredado.db")
+            with closing(sqlite3.connect(repo.ruta)) as conexion:
+                conexion.execute("INSERT INTO importaciones (archivo_origen, cliente, periodo) "
+                                 "VALUES ('heredado.csv', '', ?)", (PERIODO,))
+                conexion.commit()
+            repo.reemplazar_periodos([lote("nuevo.csv", comprobante(numero=1))])
+            self.assertEqual(repo.consultar_comprobantes(PERIODO)["numero"].tolist(), [1])

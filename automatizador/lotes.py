@@ -4,6 +4,8 @@ from collections import Counter
 
 import pandas as pd
 
+from automatizador.clientes import clave_cliente
+
 
 def operaciones_aceptadas(item):
     comprobantes = item["comprobantes"]
@@ -15,14 +17,14 @@ def operaciones_aceptadas(item):
 def resolver_conflictos(importaciones):
     """Rechaza ambos archivos si compiten por una operación del mismo período."""
     claves = Counter(
-        (item["cliente"], item["periodo"], operacion)
+        (clave_cliente(item["cliente"]), item["periodo"], operacion)
         for item in importaciones if item.get("aplicar", True)
         for operacion in operaciones_aceptadas(item)
     )
     resultado = []
     for item in importaciones:
         operaciones = operaciones_aceptadas(item)
-        repetidas = [op for op in operaciones if claves[item["cliente"], item["periodo"], op] > 1]
+        repetidas = [op for op in operaciones if claves[clave_cliente(item["cliente"]), item["periodo"], op] > 1]
         if not repetidas or not item.get("aplicar", True):
             resultado.append(item)
             continue
@@ -40,5 +42,6 @@ def resolver_conflictos(importaciones):
 
 def preparar_lotes(importaciones):
     """Prepara conflictos y operaciones para cualquier implementación del repositorio."""
-    return [{**item, "operaciones": operaciones_aceptadas(item)}
+    return [{**item, "cliente_clave": clave_cliente(item["cliente"]),
+             "operaciones": operaciones_aceptadas(item)}
             for item in resolver_conflictos(importaciones)]

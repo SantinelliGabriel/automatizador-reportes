@@ -10,6 +10,7 @@ from pathlib import Path
 import pandas as pd
 
 from automatizador.config import ARCHIVO_BD
+from automatizador.clientes import clave_cliente
 from automatizador.decimales import convertir_a_ars, normalizar_decimal
 from automatizador.lotes import preparar_lotes
 from automatizador.vigencia import seleccionar_observaciones_vigentes
@@ -319,6 +320,18 @@ def _reemplazar_periodo_en_conexion(conexion, cliente, periodo, comprobantes, re
     return importacion_id
 
 
+def _cliente_existente(conexion, nombre, clave):
+    nombres = {fila[0] for fila in conexion.execute(
+        "SELECT cliente FROM importaciones UNION SELECT cliente FROM comprobantes"
+    )}
+    equivalentes = {anterior for anterior in nombres if anterior.strip() and clave_cliente(anterior) == clave}
+    if len(equivalentes) > 1:
+        raise ValueError(
+            f"Hay nombres históricos equivalentes para {nombre!r}; requieren una migración antes de importar."
+        )
+    return next(iter(equivalentes), nombre)
+
+
 def reemplazar_periodos(importaciones, ruta=None, *, _preparados=False):
     """Aplica varios reemplazos en una única transacción SQLite."""
     if not _preparados:
@@ -329,7 +342,7 @@ def reemplazar_periodos(importaciones, ruta=None, *, _preparados=False):
         ids = [
             _reemplazar_periodo_en_conexion(
                 conexion,
-                item["cliente"],
+                _cliente_existente(conexion, item["cliente"], item["cliente_clave"]),
                 item["periodo"],
                 item["comprobantes"],
                 item["rechazados"],

@@ -21,7 +21,7 @@ class RepositorioDjango(RepositorioLotes):
         with transaction.atomic():
             for item in importaciones:
                 nombre = item["cliente"]
-                cliente = Cliente.objects.filter(nombre_clave=nombre.casefold()).first()
+                cliente = Cliente.objects.filter(nombre_clave=item["cliente_clave"]).first()
                 if cliente is None:
                     cliente = Cliente.objects.create(nombre=nombre)
                 operaciones = item["operaciones"]
@@ -104,6 +104,7 @@ class RepositorioDjango(RepositorioLotes):
             fila = {campo: getattr(importacion, campo) for campo in columnas
                     if campo not in {"cliente", "estado"}}
             fila["cliente"] = importacion.cliente.nombre
+            fila["fecha_importacion"] = importacion.fecha_importacion.strftime("%Y-%m-%d %H:%M:%S")
             fila["estado"] = ("aplicada" if importacion.aceptados > 0 else
                               "no aplicada: conflicto" if importacion.id in conflictos else
                               "no aplicada: sin filas aceptadas")

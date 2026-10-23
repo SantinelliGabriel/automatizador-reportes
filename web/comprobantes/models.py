@@ -3,6 +3,7 @@
 from django.db import models
 from django.db.models.functions import Lower
 
+from automatizador.clientes import clave_cliente
 from web.comprobantes.campos import TextoDecimalField
 
 
@@ -18,7 +19,7 @@ class Cliente(models.Model):
         return self.nombre
 
     def save(self, *args, **kwargs):
-        self.nombre_clave = self.nombre.casefold()
+        self.nombre_clave = clave_cliente(self.nombre)
         super().save(*args, **kwargs)
 
 
