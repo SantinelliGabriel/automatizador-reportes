@@ -121,6 +121,9 @@ def aplicar_formato_excel(ruta_archivo):
                     celda.number_format = '"$"#,##0.00'
         for fila in hoja.iter_rows(min_row=2):
             for celda in fila:
+                if isinstance(celda.value, str) and celda.value.startswith(("=", "+", "-", "@")):
+                    celda.data_type = "s"
+                    celda.number_format = "@"
                 if celda.row % 2 == 0:
                     celda.fill = PatternFill("solid", fgColor=celeste)
         if hoja.max_row > 1:

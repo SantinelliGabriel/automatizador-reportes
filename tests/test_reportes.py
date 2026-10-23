@@ -3,16 +3,56 @@ from decimal import Decimal
 from pathlib import Path
 
 import pandas as pd
+from openpyxl import Workbook, load_workbook
 
 from automatizador.database import crear_tabla, consultar_comprobantes, consultar_totales, reemplazar_periodo
 from automatizador.procesamiento import generar_informe
-from automatizador.reportes import construir_hojas
+from automatizador.reportes import aplicar_formato_excel, construir_hojas
 from automatizador.repositorio import RepositorioSQLite
 from automatizador.validaciones import validar_comprobantes
 from tests.helpers import comprobante, directorio_temporal
 
 
 class TestReportes(unittest.TestCase):
+    def test_formula_llega_como_texto_a_cada_hoja(self):
+        with directorio_temporal() as carpeta:
+            ruta = Path(carpeta) / "informe.xlsx"
+            libro = Workbook()
+            for nombre in ("Comprobantes", "Detalle IVA", "Resumen por cliente",
+                           "IVA por alícuota", "Observaciones"):
+                hoja = libro.active if nombre == "Comprobantes" else libro.create_sheet()
+                hoja.title = nombre
+                hoja.append(["texto"])
+                for valor in ("=1+1", "+SUM(1)", "-SUM(1)", "@SUM(1)"):
+                    hoja.append([valor])
+            libro.save(ruta)
+            libro.close()
+            aplicar_formato_excel(ruta)
+            libro = load_workbook(ruta, data_only=False)
+            for hoja in libro:
+                self.assertEqual([(hoja.cell(fila, 1).value, hoja.cell(fila, 1).data_type)
+                                  for fila in range(2, 6)],
+                                 [(valor, "s") for valor in ("=1+1", "+SUM(1)", "-SUM(1)", "@SUM(1)")])
+            libro.close()
+
+    def test_texto_peligroso_se_escribe_literal_en_todas_las_hojas(self):
+        filas = [comprobante(numero=1, razon_social="=1+1"),
+                 comprobante(numero=2, razon_social="@SUM(1)")]
+        aceptados, observados = validar_comprobantes(pd.DataFrame(filas), "2026-09")
+        self.assertTrue(observados.empty)
+        with directorio_temporal() as carpeta:
+            base = Path(carpeta) / "comprobantes.db"
+            salida = Path(carpeta) / "reporte.xlsx"
+            repo = RepositorioSQLite(base)
+            reemplazar_periodo("Cliente Sintético", "2026-09", aceptados, observados, "sintetico.csv", base)
+            generar_informe("2026-09", salida, repo)
+            libro = load_workbook(salida, data_only=False)
+            hoja = libro["Comprobantes"]
+            columna = [celda.value for celda in hoja[1]].index("razon_social") + 1
+            self.assertEqual([(hoja.cell(fila, columna).value, hoja.cell(fila, columna).data_type)
+                              for fila in (2, 3)], [("=1+1", "s"), ("@SUM(1)", "s")])
+            libro.close()
+
     def test_totales_sql_coinciden_con_excel_con_nc_y_nd(self):
         filas = [
             comprobante(numero=1, neto_gravado="100.00", iva="21.00", total="121.00"),
