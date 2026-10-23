@@ -90,6 +90,10 @@ class TestInterfaz(unittest.TestCase):
             self.assertFalse(any("Base SQLite migrada" in item.value for item in app.info))
             self.assertEqual(list(Path(carpeta).glob("*.bak*.db")), [])
             self.assertGreaterEqual(len(app.download_button), 1)
+            self.assertTrue(any("Historial de importaciones" in item.label for item in app.expander))
+            self.assertTrue(any("estado" in tabla.value.columns and
+                                "aplicada" in tabla.value["estado"].tolist()
+                                for tabla in app.dataframe))
             self.assertEqual(json.loads(app.json[0].value), {
                 "neto_gravado": "$150,000.00", "iva": "$26,250.00", "total": "$176,250.00",
             })

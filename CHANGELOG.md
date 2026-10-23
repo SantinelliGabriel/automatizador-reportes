@@ -7,6 +7,7 @@ Los cambios relevantes de cada versión se registran en este archivo.
 - El reemplazo de comprobantes se limita a cliente, período y operaciones con filas aceptadas; ventas y compras pueden coexistir.
 - Los archivos de un mismo lote que compiten por una operación quedan observados; el resto del lote continúa.
 - El historial registra operaciones y las observaciones vigentes se consultan por operación.
+- Las observaciones vigentes parten de la última importación aplicada de cada operación e incluyen intentos posteriores no aplicados; las de operación desconocida se conservan hasta la siguiente aplicación del cliente y período. El historial muestra un estado derivado, también en CLI y Streamlit.
 - La migración de SQLite a la versión 3 crea un respaldo `.v2.bak.db` antes de agregar operaciones al historial.
 - La confirmación guarda comprobantes y la generación del informe se ejecuta por separado.
 - Las filas observadas se persisten junto con el historial de importaciones.

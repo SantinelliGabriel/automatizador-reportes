@@ -12,7 +12,7 @@ import streamlit as st
 from automatizador.adaptadores import ejemplo_mapeo_holistor, _leer
 from automatizador.config import ARCHIVO_BD
 from automatizador.conciliacion import conciliar_banco, exportar_conciliacion
-from automatizador.database import crear_tabla, consultar_comprobantes
+from automatizador.database import crear_tabla, consultar_comprobantes, consultar_importaciones
 from automatizador.procesamiento import confirmar_previsualizacion, previsualizar, procesar
 from automatizador.vencimientos import cargar_calendario, proximos_vencimientos
 
@@ -203,6 +203,14 @@ if pagina == "Importar comprobantes":
             file_name=f"reporte_iva_{periodo}.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
+
+    if base.is_file():
+        with st.expander("Historial de importaciones"):
+            try:
+                historial = consultar_importaciones(base)
+                st.dataframe(historial, hide_index=True, width="stretch")
+            except Exception as error:
+                st.error(f"No se pudo leer el historial: {error}")
 
 
 elif pagina == "Conciliación bancaria":

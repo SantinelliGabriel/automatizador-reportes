@@ -1,4 +1,6 @@
 import unittest
+import io
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import pandas as pd
@@ -9,6 +11,20 @@ from tests.test_migracion_decimal import base_v1
 
 
 class TestConsola(unittest.TestCase):
+    def test_history_muestra_estado_derivado(self):
+        with directorio_temporal() as carpeta:
+            carpeta = Path(carpeta)
+            entrada = carpeta / "Cliente Sintético.csv"
+            base = carpeta / "comprobantes.db"
+            pd.DataFrame([comprobante()]).to_csv(entrada, index=False)
+            self.assertEqual(main(["--input", str(entrada), "--output", str(carpeta / "salida.xlsx"),
+                                   "--database", str(base), "--period", "2026-09"]), 0)
+            salida = io.StringIO()
+            with redirect_stdout(salida):
+                self.assertEqual(main(["--database", str(base), "--history"]), 0)
+            self.assertIn("estado", salida.getvalue())
+            self.assertIn("aplicada", salida.getvalue())
+
     def test_informa_conflicto_de_operacion_en_lote(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)

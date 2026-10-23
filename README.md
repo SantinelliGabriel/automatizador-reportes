@@ -112,6 +112,7 @@ flowchart LR
 - Usa `Decimal` para redondear a dos decimales y guarda importes en SQLite como centavos enteros.
 - Reimportar reemplaza solo las operaciones con filas aceptadas del mismo cliente y período, dentro de una transacción; conserva las demás operaciones, otros períodos y el historial. Si dos archivos del mismo lote compiten por una operación, ninguno de ellos se aplica y se informa el conflicto. Un archivo sin filas aceptadas no reemplaza comprobantes.
 - Las filas rechazadas quedan observadas con el motivo, sin abortar el lote completo.
+- Las observaciones vigentes de cada operación incluyen las de su última importación aplicada (con filas aceptadas) y las de intentos posteriores no aplicados; una nueva aplicación reemplaza ese conjunto. Las observaciones sin operación identificable siguen vigentes hasta la siguiente aplicación del cliente y período. El historial indica si cada intento se aplicó, entró en conflicto o no tuvo filas aceptadas.
 - Para moneda extranjera usa el `tipo_cambio` informado en el archivo; no consulta una cotización externa.
 
 ## Limitaciones y próximos pasos
