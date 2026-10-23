@@ -36,3 +36,9 @@ def resolver_conflictos(importaciones):
         rechazos = pd.concat([item["rechazados"], observadas], ignore_index=True)
         resultado.append({**item, "rechazados": rechazos, "aplicar": False, "conflicto": motivo})
     return resultado
+
+
+def preparar_lotes(importaciones):
+    """Prepara conflictos y operaciones para cualquier implementación del repositorio."""
+    return [{**item, "operaciones": operaciones_aceptadas(item)}
+            for item in resolver_conflictos(importaciones)]

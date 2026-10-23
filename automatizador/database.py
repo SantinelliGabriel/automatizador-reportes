@@ -11,7 +11,7 @@ import pandas as pd
 
 from automatizador.config import ARCHIVO_BD
 from automatizador.decimales import convertir_a_ars, normalizar_decimal
-from automatizador.lotes import operaciones_aceptadas, resolver_conflictos
+from automatizador.lotes import preparar_lotes
 from automatizador.vigencia import seleccionar_observaciones_vigentes
 
 
@@ -256,8 +256,7 @@ def _valor_observado(valor):
 
 
 def _reemplazar_periodo_en_conexion(conexion, cliente, periodo, comprobantes, rechazados, archivo_origen,
-                                   sha256="", aplicar=True):
-    operaciones = operaciones_aceptadas({"comprobantes": comprobantes})
+                                   sha256="", aplicar=True, operaciones=()):
     if aplicar and operaciones:
         conexion.executemany(
             "DELETE FROM comprobantes WHERE cliente = ? AND periodo = ? AND operacion = ?",
@@ -320,9 +319,10 @@ def _reemplazar_periodo_en_conexion(conexion, cliente, periodo, comprobantes, re
     return importacion_id
 
 
-def reemplazar_periodos(importaciones, ruta=None):
+def reemplazar_periodos(importaciones, ruta=None, *, _preparados=False):
     """Aplica varios reemplazos en una única transacción SQLite."""
-    importaciones = resolver_conflictos(importaciones)
+    if not _preparados:
+        importaciones = preparar_lotes(importaciones)
     conexion = conectar_bd(ruta)
     try:
         conexion.execute("BEGIN IMMEDIATE")
@@ -336,6 +336,7 @@ def reemplazar_periodos(importaciones, ruta=None):
                 item["archivo_origen"],
                 item.get("sha256", ""),
                 item.get("aplicar", True),
+                item["operaciones"],
             )
             for item in importaciones
         ]
