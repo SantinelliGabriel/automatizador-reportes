@@ -69,3 +69,8 @@ class TestTextoDecimalField(unittest.TestCase):
         Cliente.objects.create(nombre="Cliente Sintetico")
         with self.assertRaises(IntegrityError):
             Cliente.objects.create(nombre="CLIENTE SINTETICO")
+
+    def test_cliente_acentuado_unico_sin_distincion_de_mayusculas(self):
+        Cliente.objects.create(nombre="Cliente Sintético")
+        with self.assertRaises(IntegrityError):
+            Cliente.objects.create(nombre="CLIENTE SINTÉTICO")

@@ -19,6 +19,7 @@ class Migration(migrations.Migration):
             fields=[
                 ('id', models.BigAutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('nombre', models.TextField()),
+                ('nombre_clave', models.TextField(editable=False, unique=True)),
                 ('cuit', models.CharField(blank=True, max_length=11)),
             ],
             options={

@@ -182,7 +182,7 @@ class TestContratoRepositorios(unittest.TestCase):
     def test_nombre_del_contrato_se_vincula_a_un_cliente_django(self):
         limpiar_bd()
         repo = RepositorioDjango()
-        repo.reemplazar_periodos([lote("primero.csv", comprobante(numero=1), cliente="Cliente Sintetico")])
-        repo.reemplazar_periodos([lote("segundo.csv", comprobante(numero=2), cliente="CLIENTE SINTETICO")])
+        repo.reemplazar_periodos([lote("primero.csv", comprobante(numero=1), cliente="Cliente Sintético")])
+        repo.reemplazar_periodos([lote("segundo.csv", comprobante(numero=2), cliente="CLIENTE SINTÉTICO")])
         self.assertEqual(Cliente.objects.count(), 1)
         self.assertEqual(repo.consultar_comprobantes(PERIODO)["numero"].tolist(), [2])

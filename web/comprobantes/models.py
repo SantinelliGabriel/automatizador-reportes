@@ -8,6 +8,7 @@ from web.comprobantes.campos import TextoDecimalField
 
 class Cliente(models.Model):
     nombre = models.TextField()
+    nombre_clave = models.TextField(unique=True, editable=False)
     cuit = models.CharField(max_length=11, blank=True)
 
     class Meta:
@@ -15,6 +16,10 @@ class Cliente(models.Model):
 
     def __str__(self):
         return self.nombre
+
+    def save(self, *args, **kwargs):
+        self.nombre_clave = self.nombre.casefold()
+        super().save(*args, **kwargs)
 
 
 class Importacion(models.Model):

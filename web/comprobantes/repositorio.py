@@ -21,7 +21,7 @@ class RepositorioDjango(RepositorioLotes):
         with transaction.atomic():
             for item in importaciones:
                 nombre = item["cliente"]
-                cliente = Cliente.objects.filter(nombre__iexact=nombre).first()
+                cliente = Cliente.objects.filter(nombre_clave=nombre.casefold()).first()
                 if cliente is None:
                     cliente = Cliente.objects.create(nombre=nombre)
                 operaciones = item["operaciones"]
