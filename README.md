@@ -14,7 +14,7 @@ Herramienta para revisar comprobantes de ventas y compras, registrar observacion
 
 ## Índice
 
-[Problema](#problema) · [Funcionalidades](#funcionalidades) · [Demo](#demo) · [Uso](#instalación-y-uso) · [Flujo](#flujo) · [Diseño](#decisiones-de-diseño) · [Limitaciones](#limitaciones-y-próximos-pasos) · [Desarrollo](#desarrollo)
+[Problema](#problema) · [Funcionalidades](#funcionalidades) · [Demo](#demo) · [Uso](#instalación-y-uso) · [Web](#interfaz-web-en-desarrollo) · [Flujo](#flujo) · [Diseño](#decisiones-de-diseño) · [Limitaciones](#limitaciones-y-próximos-pasos) · [Desarrollo](#desarrollo)
 
 ## Problema
 
@@ -91,6 +91,14 @@ automatizador \
 
 Más detalles de [adaptadores ARCA/Holistor](docs/adaptadores.md).
 
+## Interfaz web (en desarrollo)
+
+La capa opcional de Django incluye modelos, migraciones y un repositorio de comprobantes. Todavía no tiene pantallas. Para instalar sus dependencias desde la raíz del repositorio:
+
+```bash
+python -m pip install -e ".[web]"
+```
+
 ## Migración de la base
 
 Al abrir una base SQLite anterior, el programa migra su esquema y crea un respaldo `.v0.bak.db`, `.v1.bak.db` o `.v2.bak.db`, según la versión de origen, antes de hacerlo. La CLI y la interfaz local muestran la ruta del respaldo; conservá esa copia hasta revisar los informes generados. La migración a v3 registra en el historial las operaciones que todavía pueden identificarse por sus comprobantes; las importaciones antiguas sin comprobantes asociados quedan con la operación vacía.
@@ -125,7 +133,7 @@ flowchart LR
 
 Instalación y controles de calidad, desde la raíz del repo:
 ```bash
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,web]"
 ruff check .
 coverage run -m unittest discover -s tests -v
 coverage report -m
@@ -136,6 +144,7 @@ GitHub Actions ejecuta los controles en Linux y Windows.
 
 ```text
 automatizador/                  Paquete: lógica, CLI, adaptadores e interfaz
+web/                            Proyecto Django opcional: modelos y repositorio
 tests/                          Pruebas por módulo
 tests/fixtures/arca/            CSV sintético de Mis Comprobantes
 ejemplos/                       Entradas, salida y calendario sintéticos
