@@ -11,7 +11,7 @@ import pandas as pd
 from django.db import IntegrityError
 from openpyxl import load_workbook
 
-from automatizador.procesamiento import generar_informe
+from automatizador.procesamiento import confirmar_importacion, generar_informe, previsualizar
 from automatizador.repositorio import RepositorioSQLite
 from automatizador.validaciones import validar_comprobantes
 from tests.django_utils import limpiar_bd, preparar_bd
@@ -208,6 +208,18 @@ class TestContratoRepositorios(unittest.TestCase):
         repo.reemplazar_periodos([lote("segundo.csv", comprobante(numero=2), cliente="CLIENTE SINTÉTICO")])
         self.assertEqual(Cliente.objects.count(), 1)
         self.assertEqual(repo.consultar_comprobantes(PERIODO)["numero"].tolist(), [2])
+
+    def test_cliente_explicito_de_previsualizacion_tiene_paridad_entre_repositorios(self):
+        for backend, repo, carpeta in repositorios():
+            with self.subTest(backend=backend):
+                entrada = carpeta / "nombre-aleatorio.csv"
+                pd.DataFrame([comprobante(numero=1)]).to_csv(entrada, index=False)
+                plan = previsualizar(entrada, PERIODO, cliente=" Cliente  Sintético ",
+                                     nombre_archivo="origen.csv")
+                confirmar_importacion(plan, repo)
+                self.assertEqual(repo.consultar_comprobantes(PERIODO)["cliente"].tolist(),
+                                 [" Cliente  Sintético "])
+                self.assertEqual(repo.consultar_importaciones()["archivo_origen"].tolist(), ["origen.csv"])
 
     def test_variantes_de_cliente_conservan_primera_etiqueta_en_ambos_repositorios(self):
         variantes = ["Cliente A", "cliente a", " Cliente  A "]

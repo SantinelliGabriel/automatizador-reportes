@@ -9,6 +9,15 @@ from tests.helpers import ROOT, comprobante, directorio_temporal
 
 
 class TestProcesamiento(unittest.TestCase):
+    def test_cliente_explicito_conserva_nombre_visible_y_clave_compartida(self):
+        with directorio_temporal() as carpeta:
+            entrada = Path(carpeta) / "nombre-servidor.csv"
+            pd.DataFrame([comprobante()]).to_csv(entrada, index=False)
+            vista = previsualizar(entrada, "2026-09", cliente=" Cliente  Sintético ",
+                                  nombre_archivo="origen.csv")
+            self.assertEqual(vista.archivos[0].cliente, " Cliente  Sintético ")
+            self.assertEqual(vista.archivos[0].nombre, "origen.csv")
+
     def test_informa_operaciones_reemplazadas_y_conservadas(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)
