@@ -33,13 +33,14 @@ dev = [
   "coverage>=7.6,<8",
   "ruff>=0.14,<1",
 ]
+web = ["Django>=5.2.8,<6"]
 
 [project.scripts]
 automatizador = "automatizador.cli:main"
 automatizador-demo = "automatizador.generar_datos_demo:main"
 
 [tool.setuptools]
-packages = ["automatizador", "ejemplos"]
+packages = ["automatizador", "ejemplos", "web", "web.config", "web.comprobantes", "web.comprobantes.migrations"]
 
 [tool.setuptools.package-data]
 ejemplos = ["*.xlsx", "*.csv"]

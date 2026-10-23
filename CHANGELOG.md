@@ -4,6 +4,7 @@ Los cambios relevantes de cada versión se registran en este archivo.
 
 ## [Unreleased]
 
+- La capa opcional de Django incluye modelos, migraciones y repositorio; la CLI y Streamlit siguen usando el núcleo. La identidad de clientes se normaliza antes de guardar, y ambos repositorios generan el mismo informe.
 - El reemplazo de comprobantes se limita a cliente, período y operaciones con filas aceptadas; ventas y compras pueden coexistir.
 - Los archivos de un mismo lote que compiten por una operación quedan observados; el resto del lote continúa.
 - El historial registra operaciones y las observaciones vigentes se consultan por operación.
