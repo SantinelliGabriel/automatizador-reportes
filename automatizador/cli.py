@@ -39,9 +39,10 @@ def main(argv=None):
         logging.info("Filas válidas: %s; observadas: %s; totales: %s", resultado.filas_validas, resultado.filas_observadas, totales)
         logging.info("Operaciones reemplazadas: %s", ", ".join(resultado.operaciones_reemplazadas) or "ninguna")
         logging.info("Operaciones conservadas: %s", ", ".join(resultado.operaciones_conservadas) or "ninguna")
-        for motivo in resultado.errores.get("motivo", []):
-            if str(motivo).startswith("Conflicto en el lote:"):
-                logging.error("%s", motivo)
+        for conflicto in resultado.conflictos:
+            logging.error("%s", conflicto)
+        if resultado.conflictos:
+            return 2
     except (FileNotFoundError, ValueError, RuntimeError, sqlite3.Error, OSError) as error:
         logging.error("%s", error)
         return 1

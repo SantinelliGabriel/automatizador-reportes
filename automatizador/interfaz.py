@@ -174,8 +174,7 @@ if pagina == "Importar comprobantes":
                         "migracion": resultado.migracion,
                         "operaciones_reemplazadas": resultado.operaciones_reemplazadas,
                         "operaciones_conservadas": resultado.operaciones_conservadas,
-                        "conflictos": [str(motivo) for motivo in resultado.errores.get("motivo", [])
-                                       if str(motivo).startswith("Conflicto en el lote:")],
+                        "conflictos": resultado.conflictos,
                     }
                     st.session_state["firma_confirmada"] = firma
                 st.session_state.pop("plan_importacion", None)

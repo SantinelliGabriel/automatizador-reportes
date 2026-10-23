@@ -31,6 +31,7 @@ class ArchivoPrevisualizado:
     observaciones: pd.DataFrame
     aplicar: bool
     sha256: str = ""
+    conflicto: str | None = None
 
 
 @dataclass(frozen=True)
@@ -51,6 +52,10 @@ class PrevisualizacionImportacion:
         tablas = [a.observaciones for a in self.archivos if not a.observaciones.empty]
         return pd.concat(tablas, ignore_index=True) if tablas else pd.DataFrame()
 
+    @property
+    def conflictos(self) -> tuple[str, ...]:
+        return tuple(archivo.conflicto for archivo in self.archivos if archivo.conflicto is not None)
+
 
 @dataclass(frozen=True)
 class ResultadoProcesamiento:
@@ -65,6 +70,7 @@ class ResultadoProcesamiento:
     migracion: MigracionBase | None = None
     operaciones_reemplazadas: tuple[str, ...] = ()
     operaciones_conservadas: tuple[str, ...] = ()
+    conflictos: tuple[str, ...] = ()
 
 
 def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mapping_path=None):
@@ -138,6 +144,7 @@ def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mappi
         ArchivoPrevisualizado(
             cliente=archivo.cliente, nombre=archivo.nombre, comprobantes=archivo.comprobantes,
             observaciones=lote["rechazados"], aplicar=lote["aplicar"], sha256=archivo.sha256,
+            conflicto=lote.get("conflicto"),
         ) for archivo, lote in zip(previsualizados, lotes)
     ))
 
@@ -206,6 +213,7 @@ def confirmar_previsualizacion(previsualizacion, salida, base):
         migracion=repositorio.migracion,
         operaciones_reemplazadas=tuple(f"{cliente}: {operacion}" for cliente, operacion in sorted(reemplazadas)),
         operaciones_conservadas=tuple(f"{cliente}: {operacion}" for cliente, operacion in sorted(conservadas)),
+        conflictos=previsualizacion.conflictos,
     )
 
 

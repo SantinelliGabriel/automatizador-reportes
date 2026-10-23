@@ -21,7 +21,7 @@ class TestConsola(unittest.TestCase):
                     "--input", str(entradas), "--output", str(carpeta / "reporte.xlsx"),
                     "--database", str(carpeta / "comprobantes.db"), "--period", "2026-09",
                 ])
-            self.assertEqual(codigo, 0)
+            self.assertEqual(codigo, 2)
             self.assertTrue(any("Conflicto en el lote:" in linea for linea in registros.output))
             self.assertTrue(any("Operaciones reemplazadas: ninguna" in linea for linea in registros.output))
 

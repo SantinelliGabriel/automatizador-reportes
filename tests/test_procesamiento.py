@@ -37,6 +37,7 @@ class TestProcesamiento(unittest.TestCase):
             self.assertEqual(resultado.comprobantes["numero"].tolist(), [3])
             self.assertEqual(resultado.filas_observadas, 2)
             self.assertTrue(all("Conflicto en el lote" in motivo for motivo in resultado.errores["motivo"]))
+            self.assertEqual(len(resultado.conflictos), 2)
 
     def test_devuelve_metricas_y_reporte_excel(self):
         entrada = ROOT / "ejemplos" / "Cliente Demo Norte.xlsx"
