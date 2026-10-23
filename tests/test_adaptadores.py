@@ -1,6 +1,7 @@
 import unittest
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -163,6 +164,13 @@ class TestAdaptadorHolistor(unittest.TestCase):
 
 
 class TestLecturaArchivos(unittest.TestCase):
+    def test_excel_moderno_se_lee_solo_lectura_y_sin_enlaces(self):
+        with patch("automatizador.adaptadores.pd.read_excel", return_value=pd.DataFrame()) as lectura:
+            _leer(Path("sintetico.xlsx"))
+        self.assertEqual(lectura.call_args.kwargs["engine"], "openpyxl")
+        self.assertEqual(lectura.call_args.kwargs["engine_kwargs"],
+                         {"read_only": True, "data_only": True, "keep_links": False})
+
     def test_lee_csv_cp1252_y_rechaza_extension_desconocida(self):
         with directorio_temporal() as carpeta:
             archivo = Path(carpeta) / "latin1.csv"

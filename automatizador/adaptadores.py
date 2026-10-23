@@ -84,7 +84,10 @@ def _leer(path, sheet_name=0):
         except UnicodeDecodeError:
             return pd.read_csv(path, sep=None, engine="python", dtype=str, encoding="cp1252")
     if path.suffix.casefold() in {".xlsx", ".xlsm", ".xls"}:
-        return pd.read_excel(path, sheet_name=sheet_name)
+        if path.suffix.casefold() in {".xlsx", ".xlsm"}:
+            return pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl",
+                                 engine_kwargs={"read_only": True, "data_only": True, "keep_links": False})
+        return pd.read_excel(path, sheet_name=sheet_name, engine="xlrd")
     raise ValueError(f"Formato no admitido: {path.suffix}. Use Excel, CSV o TXT.")
 
 
