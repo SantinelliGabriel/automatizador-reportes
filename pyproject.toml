@@ -40,7 +40,8 @@ automatizador = "automatizador.cli:main"
 automatizador-demo = "automatizador.generar_datos_demo:main"
 
 [tool.setuptools]
-packages = ["automatizador", "ejemplos", "web", "web.config", "web.comprobantes", "web.comprobantes.migrations"]
+packages = ["automatizador", "ejemplos", "web", "web.config", "web.comprobantes",
+            "web.comprobantes.migrations", "web.comprobantes.management", "web.comprobantes.management.commands"]
 
 [tool.setuptools.package-data]
 ejemplos = ["*.xlsx", "*.csv"]
