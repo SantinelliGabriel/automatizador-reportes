@@ -1,4 +1,6 @@
 import unittest
+import io
+from contextlib import redirect_stdout
 from pathlib import Path
 
 import pandas as pd
@@ -9,6 +11,36 @@ from tests.test_migracion_decimal import base_v1
 
 
 class TestConsola(unittest.TestCase):
+    def test_history_muestra_estado_derivado(self):
+        with directorio_temporal() as carpeta:
+            carpeta = Path(carpeta)
+            entrada = carpeta / "Cliente Sintético.csv"
+            base = carpeta / "comprobantes.db"
+            pd.DataFrame([comprobante()]).to_csv(entrada, index=False)
+            self.assertEqual(main(["--input", str(entrada), "--output", str(carpeta / "salida.xlsx"),
+                                   "--database", str(base), "--period", "2026-09"]), 0)
+            salida = io.StringIO()
+            with redirect_stdout(salida):
+                self.assertEqual(main(["--database", str(base), "--history"]), 0)
+            self.assertIn("estado", salida.getvalue())
+            self.assertIn("aplicada", salida.getvalue())
+
+    def test_informa_conflicto_de_operacion_en_lote(self):
+        with directorio_temporal() as carpeta:
+            carpeta = Path(carpeta)
+            entradas = carpeta / "entradas"
+            entradas.mkdir()
+            pd.DataFrame([comprobante(numero=1)]).to_csv(entradas / "Cliente Sintético.csv", index=False)
+            pd.DataFrame([comprobante(numero=2)]).to_excel(entradas / "Cliente Sintético.xlsx", index=False)
+            with self.assertLogs(level="INFO") as registros:
+                codigo = main([
+                    "--input", str(entradas), "--output", str(carpeta / "reporte.xlsx"),
+                    "--database", str(carpeta / "comprobantes.db"), "--period", "2026-09",
+                ])
+            self.assertEqual(codigo, 2)
+            self.assertTrue(any("Conflicto en el lote:" in linea for linea in registros.output))
+            self.assertTrue(any("Operaciones reemplazadas: ninguna" in linea for linea in registros.output))
+
     def test_base_nueva_no_anuncia_migracion_ni_crea_respaldo(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)
@@ -37,7 +69,7 @@ class TestConsola(unittest.TestCase):
                 ])
             self.assertEqual(codigo, 0)
             self.assertTrue(any(
-                "Base SQLite migrada de versión 1 a 2" in linea
+                "Base SQLite migrada de versión 1 a 3" in linea
                 and str(carpeta / "legacy.v1.bak.db") in linea
                 for linea in registros.output
             ))

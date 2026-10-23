@@ -1,11 +1,14 @@
 import json
+import io
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
+import pandas as pd
 from streamlit.testing.v1 import AppTest
 
-from tests.helpers import ROOT
+from tests.helpers import ROOT, comprobante
 from tests.test_migracion_decimal import base_v1
 
 
@@ -15,6 +18,28 @@ def app_test(path):
 
 
 class TestInterfaz(unittest.TestCase):
+    def test_muestra_conflicto_entre_archivos_del_mismo_cliente(self):
+        csv = pd.DataFrame([comprobante(numero=1)]).to_csv(index=False).encode("utf-8")
+        excel = io.BytesIO()
+        pd.DataFrame([comprobante(numero=2)]).to_excel(excel, index=False)
+        with patch.dict("os.environ", {"AUTOMATIZADOR_DEMO": "0"}), tempfile.TemporaryDirectory(
+            dir=ROOT / ".test_tmp"
+        ) as carpeta:
+            app = app_test(ROOT / "automatizador" / "interfaz.py")
+            app.run()
+            app.text_input[1].set_value(str(Path(carpeta) / "comprobantes.db"))
+            app.text_input[0].set_value("2026-09")
+            app.file_uploader[0].set_value([
+                ("Cliente Sintético.csv", csv, "text/csv"),
+                ("Cliente Sintético.xlsx", excel.getvalue(),
+                 "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"),
+            ])
+            app.run()
+            app.button[0].click()
+            app.run()
+            self.assertFalse(app.exception)
+            self.assertTrue(any("Conflicto en el lote:" in item.value for item in app.error))
+
     def test_avisa_migracion_y_ruta_del_respaldo(self):
         entrada = ROOT / "ejemplos" / "Cliente Demo Norte.xlsx"
         with tempfile.TemporaryDirectory(dir=ROOT / ".test_tmp") as carpeta:
@@ -32,7 +57,7 @@ class TestInterfaz(unittest.TestCase):
 
             self.assertFalse(app.exception)
             self.assertTrue(any(
-                "Base SQLite migrada de versión 1 a 2" in item.value
+                "Base SQLite migrada de versión 1 a 3" in item.value
                 and str(Path(carpeta) / "legacy.v1.bak.db") in item.value
                 for item in app.info
             ))
@@ -65,6 +90,10 @@ class TestInterfaz(unittest.TestCase):
             self.assertFalse(any("Base SQLite migrada" in item.value for item in app.info))
             self.assertEqual(list(Path(carpeta).glob("*.bak*.db")), [])
             self.assertGreaterEqual(len(app.download_button), 1)
+            self.assertTrue(any("Historial de importaciones" in item.label for item in app.expander))
+            self.assertTrue(any("estado" in tabla.value.columns and
+                                "aplicada" in tabla.value["estado"].tolist()
+                                for tabla in app.dataframe))
             self.assertEqual(json.loads(app.json[0].value), {
                 "neto_gravado": "$150,000.00", "iva": "$26,250.00", "total": "$176,250.00",
             })

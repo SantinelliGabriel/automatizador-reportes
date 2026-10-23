@@ -17,7 +17,7 @@ from tests.helpers import comprobante, directorio_temporal
 
 
 class TestRepositorioSQLite(unittest.TestCase):
-    def test_ventas_luego_compras_del_mismo_cliente_periodo_reemplaza_ventas(self):
+    def test_ventas_luego_compras_del_mismo_cliente_periodo_conserva_ambas(self):
         with directorio_temporal() as carpeta:
             repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
             for operacion, numero in (("ventas", 1), ("compras", 2)):
@@ -31,12 +31,12 @@ class TestRepositorioSQLite(unittest.TestCase):
                 }])
 
             actuales = repo.consultar_comprobantes("2026-09")
-            self.assertEqual(actuales[["operacion", "numero"]].values.tolist(), [["compras", 2]])
+            self.assertEqual(actuales[["operacion", "numero"]].values.tolist(), [["ventas", 1], ["compras", 2]])
             self.assertEqual(repo.consultar_importaciones()["archivo_origen"].tolist(), [
                 "compras.csv", "ventas.csv",
             ])
 
-    def test_dos_archivos_del_mismo_cliente_periodo_en_un_lote_dejan_solo_el_ultimo(self):
+    def test_dos_archivos_del_mismo_cliente_periodo_con_operaciones_distintas_conserva_ambos(self):
         with directorio_temporal() as carpeta:
             repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
             lotes = []
@@ -54,8 +54,126 @@ class TestRepositorioSQLite(unittest.TestCase):
 
             self.assertEqual(len(ids), 2)
             actuales = repo.consultar_comprobantes("2026-09")
-            self.assertEqual(actuales[["operacion", "numero"]].values.tolist(), [["compras", 2]])
+            self.assertEqual(actuales[["operacion", "numero"]].values.tolist(), [["ventas", 1], ["compras", 2]])
             self.assertEqual(len(repo.consultar_importaciones()), 2)
+
+    def test_reimportar_ventas_conserva_compras_y_registra_operaciones(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
+            for operacion, numero in (("ventas", 1), ("compras", 2), ("ventas", 3)):
+                aceptados, rechazados = validar_comprobantes(pd.DataFrame([
+                    comprobante(numero=numero, operacion=operacion),
+                ]), "2026-09")
+                repo.reemplazar_periodos([{
+                    "cliente": "Cliente Sintético", "periodo": "2026-09", "comprobantes": aceptados,
+                    "rechazados": rechazados, "archivo_origen": f"{operacion}-{numero}.csv",
+                }])
+            self.assertEqual(set(repo.consultar_comprobantes("2026-09")["numero"]), {2, 3})
+            self.assertEqual(repo.consultar_importaciones()["operaciones"].tolist(),
+                             ["ventas", "compras", "ventas"])
+
+    def test_archivo_mixto_reemplaza_ventas_y_compras(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
+            for numero, operacion in ((1, "ventas"), (2, "compras")):
+                aceptados, rechazados = validar_comprobantes(pd.DataFrame([
+                    comprobante(numero=numero, operacion=operacion),
+                ]), "2026-09")
+                repo.reemplazar_periodos([{
+                    "cliente": "Cliente Sintético", "periodo": "2026-09", "comprobantes": aceptados,
+                    "rechazados": rechazados, "archivo_origen": f"{operacion}.csv",
+                }])
+            aceptados, rechazados = validar_comprobantes(pd.DataFrame([
+                comprobante(numero=3, operacion="ventas"), comprobante(numero=4, operacion="compras"),
+            ]), "2026-09")
+            repo.reemplazar_periodos([{
+                "cliente": "Cliente Sintético", "periodo": "2026-09", "comprobantes": aceptados,
+                "rechazados": rechazados, "archivo_origen": "mixto.csv",
+            }])
+            self.assertEqual(set(repo.consultar_comprobantes("2026-09")["numero"]), {3, 4})
+            self.assertEqual(repo.consultar_importaciones().iloc[0]["operaciones"], "compras,ventas")
+
+    def test_operacion_con_solo_filas_rechazadas_no_se_reemplaza(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
+            compras, rechazados = validar_comprobantes(pd.DataFrame([
+                comprobante(numero=1, operacion="compras"),
+            ]), "2026-09")
+            repo.reemplazar_periodos([{
+                "cliente": "Cliente Sintético", "periodo": "2026-09", "comprobantes": compras,
+                "rechazados": rechazados, "archivo_origen": "compras.csv",
+            }])
+            aceptados, rechazados = validar_comprobantes(pd.DataFrame([
+                comprobante(numero=2, operacion="ventas"),
+                comprobante(numero=3, operacion="compras", cuit="CUIT inválido"),
+            ]), "2026-09")
+            repo.reemplazar_periodos([{
+                "cliente": "Cliente Sintético", "periodo": "2026-09", "comprobantes": aceptados,
+                "rechazados": rechazados, "archivo_origen": "mixto.csv",
+            }])
+            self.assertEqual(set(repo.consultar_comprobantes("2026-09")["numero"]), {1, 2})
+            self.assertEqual(repo.consultar_importaciones().iloc[0]["operaciones"], "ventas")
+
+    def test_conflicto_en_lote_no_aplica_ningun_archivo_y_continua_con_otro_cliente(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
+            anterior, vacios = validar_comprobantes(pd.DataFrame([comprobante(numero=99)]), "2026-09")
+            repo.reemplazar_periodos([{
+                "cliente": "Cliente Sintético", "periodo": "2026-09", "comprobantes": anterior,
+                "rechazados": vacios, "archivo_origen": "anterior.csv",
+            }])
+            lotes = []
+            for cliente, numero in (("Cliente Sintético", 1), ("Cliente Sintético", 2),
+                                    ("Otro Cliente Sintético", 3)):
+                aceptados, rechazados = validar_comprobantes(pd.DataFrame([
+                    comprobante(numero=numero),
+                ]), "2026-09")
+                lotes.append({
+                    "cliente": cliente, "periodo": "2026-09", "comprobantes": aceptados,
+                    "rechazados": rechazados, "archivo_origen": f"archivo-{numero}.csv",
+                })
+            ids = repo.reemplazar_periodos(lotes)
+            self.assertEqual(repo.consultar_comprobantes("2026-09")["numero"].tolist(), [99, 3])
+            self.assertEqual(repo.consultar_importaciones()["aceptados"].tolist(), [1, 0, 0, 1])
+            for identificador in ids[:2]:
+                observaciones = repo.consultar_observaciones(importacion_id=identificador)
+                self.assertEqual(len(observaciones), 1)
+                self.assertIn("Conflicto en el lote", observaciones.iloc[0]["motivo"])
+
+    def test_observaciones_de_ventas_y_compras_coexisten(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
+            for operacion, numero in (("ventas", 1), ("compras", 3)):
+                aceptados, rechazados = validar_comprobantes(pd.DataFrame([
+                    comprobante(numero=numero, operacion=operacion),
+                    comprobante(numero=numero + 1, operacion=operacion, cuit="CUIT inválido"),
+                ]), "2026-09")
+                repo.reemplazar_periodos([{
+                    "cliente": "Cliente Sintético", "periodo": "2026-09", "comprobantes": aceptados,
+                    "rechazados": rechazados, "archivo_origen": f"{operacion}.csv",
+                }])
+            self.assertEqual(set(repo.consultar_observaciones("2026-09")["operacion"]),
+                             {"ventas", "compras"})
+            aceptados, rechazados = validar_comprobantes(pd.DataFrame([
+                comprobante(numero=5, operacion="ventas"),
+            ]), "2026-09")
+            repo.reemplazar_periodos([{
+                "cliente": "Cliente Sintético", "periodo": "2026-09", "comprobantes": aceptados,
+                "rechazados": rechazados, "archivo_origen": "ventas-nuevas.csv",
+            }])
+            self.assertEqual(repo.consultar_observaciones("2026-09")["operacion"].tolist(), ["compras"])
+
+    def test_observacion_sin_operacion_identificable_sigue_visible(self):
+        with directorio_temporal() as carpeta:
+            repo = RepositorioSQLite(Path(carpeta) / "comprobantes.db")
+            aceptados, _ = validar_comprobantes(pd.DataFrame([comprobante(numero=1)]), "2026-09")
+            repo.reemplazar_periodos([{
+                "cliente": "Cliente Sintético", "periodo": "2026-09", "comprobantes": aceptados,
+                "rechazados": pd.DataFrame([{"fila_excel": 3, "motivo": "Registro sintético ilegible"}]),
+                "archivo_origen": "ventas.csv",
+            }])
+            observaciones = repo.consultar_observaciones("2026-09")
+            self.assertEqual(observaciones["motivo"].tolist(), ["Registro sintético ilegible"])
 
     def test_excel_compuesto_y_regenerado_tienen_mismas_hojas_y_celdas(self):
         with directorio_temporal() as carpeta:

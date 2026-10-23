@@ -13,6 +13,7 @@ from automatizador.database import (
     MigracionBase,
     consultar_totales,
 )
+from automatizador.lotes import operaciones_aceptadas, resolver_conflictos
 from automatizador.repositorio import RepositorioComprobantes, RepositorioSQLite
 from automatizador.reportes import (
     aplicar_formato_excel,
@@ -30,6 +31,7 @@ class ArchivoPrevisualizado:
     observaciones: pd.DataFrame
     aplicar: bool
     sha256: str = ""
+    conflicto: str | None = None
 
 
 @dataclass(frozen=True)
@@ -39,7 +41,7 @@ class PrevisualizacionImportacion:
 
     @property
     def filas_validas(self):
-        return sum(len(archivo.comprobantes) for archivo in self.archivos)
+        return sum(len(archivo.comprobantes) for archivo in self.archivos if archivo.aplicar)
 
     @property
     def filas_observadas(self):
@@ -49,6 +51,10 @@ class PrevisualizacionImportacion:
     def observaciones(self):
         tablas = [a.observaciones for a in self.archivos if not a.observaciones.empty]
         return pd.concat(tablas, ignore_index=True) if tablas else pd.DataFrame()
+
+    @property
+    def conflictos(self) -> tuple[str, ...]:
+        return tuple(archivo.conflicto for archivo in self.archivos if archivo.conflicto is not None)
 
 
 @dataclass(frozen=True)
@@ -62,6 +68,9 @@ class ResultadoProcesamiento:
     filas_observadas: int
     totales: dict[str, Decimal]
     migracion: MigracionBase | None = None
+    operaciones_reemplazadas: tuple[str, ...] = ()
+    operaciones_conservadas: tuple[str, ...] = ()
+    conflictos: tuple[str, ...] = ()
 
 
 def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mapping_path=None):
@@ -127,7 +136,17 @@ def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mappi
             sha256=sha256,
         ))
         logging.info("%s: %s aceptados, %s observados.", cliente, len(aceptados), len(rechazados))
-    return PrevisualizacionImportacion(periodo=periodo, archivos=tuple(previsualizados))
+    lotes = resolver_conflictos([{
+        "cliente": archivo.cliente, "periodo": periodo, "comprobantes": archivo.comprobantes,
+        "rechazados": archivo.observaciones, "aplicar": archivo.aplicar,
+    } for archivo in previsualizados])
+    return PrevisualizacionImportacion(periodo=periodo, archivos=tuple(
+        ArchivoPrevisualizado(
+            cliente=archivo.cliente, nombre=archivo.nombre, comprobantes=archivo.comprobantes,
+            observaciones=lote["rechazados"], aplicar=lote["aplicar"], sha256=archivo.sha256,
+            conflicto=lote.get("conflicto"),
+        ) for archivo, lote in zip(previsualizados, lotes)
+    ))
 
 
 def confirmar_importacion(previsualizacion: PrevisualizacionImportacion,
@@ -171,6 +190,14 @@ def generar_informe(periodo: str, salida: Path, repositorio: RepositorioComproba
 def confirmar_previsualizacion(previsualizacion, salida, base):
     """Compatibilidad: confirma y genera el informe para CLI y Streamlit."""
     repositorio = RepositorioSQLite(base)
+    anteriores = repositorio.consultar_comprobantes(previsualizacion.periodo)
+    reemplazadas = {
+        (archivo.cliente, operacion)
+        for archivo in previsualizacion.archivos if archivo.aplicar
+        for operacion in operaciones_aceptadas({"comprobantes": archivo.comprobantes})
+    }
+    conservadas = ({(fila.cliente, fila.operacion) for fila in anteriores.itertuples()}
+                  - reemplazadas)
     confirmar_importacion(previsualizacion, repositorio)
     salida = generar_informe(previsualizacion.periodo, salida, repositorio)
     comprobantes = repositorio.consultar_comprobantes(previsualizacion.periodo)
@@ -184,6 +211,9 @@ def confirmar_previsualizacion(previsualizacion, salida, base):
         filas_observadas=previsualizacion.filas_observadas,
         totales=totales,
         migracion=repositorio.migracion,
+        operaciones_reemplazadas=tuple(f"{cliente}: {operacion}" for cliente, operacion in sorted(reemplazadas)),
+        operaciones_conservadas=tuple(f"{cliente}: {operacion}" for cliente, operacion in sorted(conservadas)),
+        conflictos=previsualizacion.conflictos,
     )
 
 

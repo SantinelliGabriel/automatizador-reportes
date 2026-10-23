@@ -37,6 +37,12 @@ def main(argv=None):
         resultado = procesar(args.input, args.output, args.database, args.period, args.source, args.operation, args.mapping)
         totales = ", ".join(f"{columna}={importe:.2f}" for columna, importe in resultado.totales.items())
         logging.info("Filas válidas: %s; observadas: %s; totales: %s", resultado.filas_validas, resultado.filas_observadas, totales)
+        logging.info("Operaciones reemplazadas: %s", ", ".join(resultado.operaciones_reemplazadas) or "ninguna")
+        logging.info("Operaciones conservadas: %s", ", ".join(resultado.operaciones_conservadas) or "ninguna")
+        for conflicto in resultado.conflictos:
+            logging.error("%s", conflicto)
+        if resultado.conflictos:
+            return 2
     except (FileNotFoundError, ValueError, RuntimeError, sqlite3.Error, OSError) as error:
         logging.error("%s", error)
         return 1

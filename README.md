@@ -93,7 +93,7 @@ Más detalles de [adaptadores ARCA/Holistor](docs/adaptadores.md).
 
 ## Migración de la base
 
-Al abrir una base SQLite anterior, el programa migra su esquema y crea un respaldo `.v0.bak.db` o `.v1.bak.db`, según la versión de origen, antes de hacerlo. La CLI y la interfaz local muestran la ruta del respaldo; conservá esa copia hasta revisar los informes generados.
+Al abrir una base SQLite anterior, el programa migra su esquema y crea un respaldo `.v0.bak.db`, `.v1.bak.db` o `.v2.bak.db`, según la versión de origen, antes de hacerlo. La CLI y la interfaz local muestran la ruta del respaldo; conservá esa copia hasta revisar los informes generados. La migración a v3 registra en el historial las operaciones que todavía pueden identificarse por sus comprobantes; las importaciones antiguas sin comprobantes asociados quedan con la operación vacía.
 
 ## Flujo
 
@@ -103,15 +103,16 @@ flowchart LR
     B --> C[Validación por comprobante]
     C -->|Aceptado| D[Comprobantes válidos]
     C -->|Observado con motivo| E[Observaciones]
-    D -->|CLI o confirmar en Streamlit| F[SQLite por cliente y período]
+    D -->|CLI o confirmar en Streamlit| F[SQLite por cliente, período y operación]
     E --> G[Informe Excel]
     F --> G
 ```
 
 ## Decisiones de diseño
 - Usa `Decimal` para redondear a dos decimales y guarda importes en SQLite como centavos enteros.
-- Reimportar reemplaza solo el mismo cliente y período, dentro de una transacción; el historial y otros períodos se conservan.
+- Reimportar reemplaza solo las operaciones con filas aceptadas del mismo cliente y período, dentro de una transacción; conserva las demás operaciones, otros períodos y el historial. Si dos archivos del mismo lote compiten por una operación, ninguno de ellos se aplica y se informa el conflicto. Un archivo sin filas aceptadas no reemplaza comprobantes.
 - Las filas rechazadas quedan observadas con el motivo, sin abortar el lote completo.
+- Las observaciones vigentes de cada operación incluyen las de su última importación aplicada (con filas aceptadas) y las de intentos posteriores no aplicados; una nueva aplicación reemplaza ese conjunto. Las observaciones sin operación identificable siguen vigentes hasta la siguiente aplicación del cliente y período. El historial indica si cada intento se aplicó, entró en conflicto o no tuvo filas aceptadas.
 - Para moneda extranjera usa el `tipo_cambio` informado en el archivo; no consulta una cotización externa.
 
 ## Limitaciones y próximos pasos
