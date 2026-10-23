@@ -12,6 +12,7 @@ import pandas as pd
 from automatizador.config import ARCHIVO_BD
 from automatizador.decimales import convertir_a_ars, normalizar_decimal
 from automatizador.lotes import operaciones_aceptadas, resolver_conflictos
+from automatizador.vigencia import seleccionar_observaciones_vigentes
 
 
 VERSION_ESQUEMA = 3
@@ -418,7 +419,16 @@ def consultar_totales(ruta=None, periodo=None) -> dict[str, Decimal]:
 def consultar_importaciones(ruta=None):
     conexion = conectar_bd(ruta)
     try:
-        return pd.read_sql_query("SELECT * FROM importaciones ORDER BY id DESC", conexion)
+        historial = pd.read_sql_query("SELECT * FROM importaciones ORDER BY id DESC", conexion)
+        conflictos = {identificador for (identificador,) in conexion.execute(
+            "SELECT DISTINCT importacion_id FROM observaciones WHERE motivo LIKE 'Conflicto en el lote:%'"
+        )}
+        historial["estado"] = historial.apply(
+            lambda fila: ("aplicada" if fila["aceptados"] > 0 else
+                          "no aplicada: conflicto" if fila["id"] in conflictos else
+                          "no aplicada: sin filas aceptadas"), axis=1,
+        )
+        return historial
     finally:
         conexion.close()
 
@@ -444,43 +454,26 @@ def consultar_observaciones(ruta=None, periodo=None, importacion_id=None):
         filas = conexion.execute(consulta, params).fetchall()
         columnas = ("importacion_id", "cliente", "periodo", "archivo_origen", "fila_excel", "motivo",
                     "datos_json", "operaciones")
-        filas_importacion = conexion.execute(
-            "SELECT id, cliente, periodo, operaciones FROM importaciones" +
-            (" WHERE periodo = ?" if periodo is not None else "") + " ORDER BY id",
-            (periodo,) if periodo is not None else (),
-        ).fetchall() if importacion_id is None else []
-        operaciones_por_id = {identificador: set(operaciones.split(",")) - {""}
-                             for identificador, _, _, operaciones in filas_importacion}
-        for fila in filas:
-            identificador = fila[0]
-            if identificador in operaciones_por_id:
-                operacion = json.loads(fila[6]).get("operacion")
-                if operacion in {"ventas", "compras"}:
-                    operaciones_por_id[identificador].add(operacion)
-        ultimas = {}
-        ultimas_sin_operacion = {}
-        for identificador, cliente, mes, _ in filas_importacion:
-            for operacion in operaciones_por_id[identificador]:
-                ultimas[cliente, mes, operacion] = identificador
-            ultimas_sin_operacion[cliente, mes] = identificador
         resultado = []
         for fila in filas:
             registro = dict(zip(columnas, fila))
             datos = json.loads(registro.pop("datos_json"))
             registro.pop("operaciones")
-            if importacion_id is None:
-                clave = (registro["cliente"], registro["periodo"])
-                operacion = datos.get("operacion")
-                if operacion in {"ventas", "compras"}:
-                    vigente = ultimas.get((*clave, operacion)) == registro["importacion_id"]
-                else:
-                    vigente = (registro["importacion_id"] in {
-                        ultimas.get((*clave, op)) for op in operaciones_por_id[registro["importacion_id"]]
-                    } or ultimas_sin_operacion.get(clave) == registro["importacion_id"])
-                if not vigente:
-                    continue
             registro = {**datos, **registro}
             resultado.append(registro)
+        if importacion_id is None:
+            importaciones = [dict(zip(("id", "cliente", "periodo", "aceptados", "operaciones"), fila))
+                             for fila in conexion.execute(
+                                 "SELECT id, cliente, periodo, aceptados, operaciones FROM importaciones" +
+                                 (" WHERE periodo = ?" if periodo is not None else ""),
+                                 (periodo,) if periodo is not None else (),
+                             )]
+            operaciones_guardadas = {}
+            for identificador, operacion in conexion.execute(
+                "SELECT DISTINCT importacion_id, operacion FROM comprobantes"
+            ):
+                operaciones_guardadas.setdefault(identificador, set()).add(operacion)
+            resultado = seleccionar_observaciones_vigentes(importaciones, resultado, operaciones_guardadas)
         extras = sorted({clave for registro in resultado for clave in registro if clave not in columnas})
         return pd.DataFrame(resultado, columns=[*columnas[:-2], *extras])
     finally:
