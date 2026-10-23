@@ -18,6 +18,8 @@ htmlcov/
 reporte_*.xlsx
 comprobantes.db
 *.db
+db.sqlite3
+media/
 datos/
 resultados/
 

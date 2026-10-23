@@ -33,6 +33,7 @@ dev = [
   "coverage>=7.6,<8",
   "ruff>=0.14,<1",
 ]
+web = ["Django>=5.2.8,<6"]
 
 [project.scripts]
 automatizador = "automatizador.cli:main"
