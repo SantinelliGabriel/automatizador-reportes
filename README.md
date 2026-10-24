@@ -91,12 +91,30 @@ automatizador \
 
 Más detalles de [adaptadores ARCA/Holistor](docs/adaptadores.md).
 
-## Interfaz web (en desarrollo)
+## Interfaz web (Django)
 
-La capa opcional de Django incluye modelos, migraciones y un repositorio de comprobantes. Todavía no tiene pantallas. Para instalar sus dependencias desde la raíz del repositorio:
+La interfaz local permite iniciar sesión, dar de alta clientes, subir comprobantes y revisar filas válidas y observadas antes de confirmar la importación. Usa el repositorio Django; la CLI y Streamlit funcionan sin esa dependencia. Para instalarla desde la raíz del repositorio:
 
 ```bash
 python -m pip install -e ".[web]"
+```
+
+Para iniciarla en PowerShell:
+
+```powershell
+$env:DJANGO_DEBUG = "1"
+python web/manage.py migrate
+python web/manage.py createsuperuser
+python web/manage.py runserver
+```
+
+En macOS o Linux:
+
+```bash
+export DJANGO_DEBUG=1
+python web/manage.py migrate
+python web/manage.py createsuperuser
+python web/manage.py runserver
 ```
 
 ## Migración de la base
@@ -144,7 +162,7 @@ GitHub Actions ejecuta los controles en Linux y Windows.
 
 ```text
 automatizador/                  Paquete: lógica, CLI, adaptadores e interfaz
-web/                            Proyecto Django opcional: modelos y repositorio
+web/                            Proyecto Django opcional: modelos, repositorio e interfaz
 tests/                          Pruebas por módulo
 tests/fixtures/arca/            CSV sintético de Mis Comprobantes
 ejemplos/                       Entradas, salida y calendario sintéticos

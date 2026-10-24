@@ -4,6 +4,9 @@ Los cambios relevantes de cada versión se registran en este archivo.
 
 ## [Unreleased]
 
+- La interfaz local de Django permite login, alta de clientes, vista previa y confirmación de importaciones; los archivos de vista previa vencen a los 30 minutos.
+- Las cargas web limitan tamaño y estructura de archivos, y los Excel se leen en modo de solo lectura.
+- Los textos que comienzan con `=`, `+`, `-` o `@` se escriben como texto literal en las hojas Excel de todos los informes.
 - La capa opcional de Django incluye modelos, migraciones y repositorio; la CLI y Streamlit siguen usando el núcleo. La identidad de clientes se normaliza antes de guardar, y ambos repositorios generan el mismo informe.
 - El reemplazo de comprobantes se limita a cliente, período y operaciones con filas aceptadas; ventas y compras pueden coexistir.
 - Los archivos de un mismo lote que compiten por una operación quedan observados; el resto del lote continúa.
