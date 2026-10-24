@@ -6,6 +6,7 @@ from zipfile import BadZipFile, ZipFile
 
 from defusedxml.common import DefusedXmlException
 from defusedxml.ElementTree import iterparse
+from django.conf import settings
 from django.core.exceptions import ValidationError
 
 
@@ -14,7 +15,7 @@ LIMITE_DESCOMPRIMIDO = 100 * 1024 * 1024
 EXTENSIONES = {
     "estandar": {".xlsx", ".xlsm", ".xls", ".csv", ".txt"},
     "arca": {".xlsx", ".xlsm", ".xls", ".csv", ".txt"},
-    "holistor": {".xlsx", ".xlsm", ".xls", ".csv", ".txt"},
+    "holistor": {".xlsx", ".xlsm", ".xls", ".csv", ".txt", ".prn"},
 }
 
 
@@ -26,6 +27,8 @@ def validar_archivo(archivo, formato: str) -> tuple[str, str]:
     sufijo = Path(nombre).suffix.casefold()
     if sufijo not in EXTENSIONES.get(formato, set()):
         raise ValidationError("La extensión no corresponde al origen elegido.")
+    if sufijo == ".prn" and (not settings.HOLISTOR_MAPPING_PATH or not settings.HOLISTOR_MAPPING_PATH.is_file()):
+        raise ValidationError("Los archivos PRN necesitan un mapeo Holistor configurado en el servidor.")
     if archivo.size == 0 or archivo.size > LIMITE_ARCHIVO:
         raise ValidationError("El archivo debe tener entre 1 byte y 10 MiB.")
     encabezado = archivo.read(8)
@@ -43,7 +46,7 @@ def validar_archivo(archivo, formato: str) -> tuple[str, str]:
                 if "[Content_Types].xml" not in comprimido.namelist() or "xl/workbook.xml" not in comprimido.namelist():
                     raise ValidationError("El archivo Excel no tiene una estructura válida.")
                 for info in miembros:
-                    if info.filename.endswith(".xml"):
+                    if info.filename.endswith((".xml", ".rels")):
                         with comprimido.open(info) as contenido:
                             for _, elemento in iterparse(contenido, events=("end",)):
                                 elemento.clear()

@@ -6,7 +6,9 @@ from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.core.exceptions import ValidationError
+from django.test import override_settings
 
+from tests.django_utils import preparar_bd
 from web.comprobantes.cargas import validar_archivo
 
 
@@ -18,6 +20,10 @@ class ArchivoFalso(io.BytesIO):
 
 
 class TestCargaSegura(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        preparar_bd()
+
     def test_rechaza_archivo_mayor_a_10_mib(self):
         archivo = ArchivoFalso("grande.csv", b"a")
         archivo.size = 10 * 1024 * 1024 + 1
@@ -37,3 +43,8 @@ class TestCargaSegura(unittest.TestCase):
             zip_falso.return_value.__enter__.return_value.infolist.return_value = [info]
             with self.assertRaisesRegex(ValidationError, "descomprimido"):
                 validar_archivo(archivo, "estandar")
+
+    def test_prn_requiere_mapeo_configurado(self):
+        with override_settings(HOLISTOR_MAPPING_PATH=None):
+            with self.assertRaisesRegex(ValidationError, "mapeo Holistor"):
+                validar_archivo(ArchivoFalso("sintetico.prn", b"2026 09"), "holistor")

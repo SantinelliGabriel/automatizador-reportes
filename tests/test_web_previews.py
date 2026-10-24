@@ -9,6 +9,7 @@ from pathlib import Path
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
 
+from tests.django_utils import preparar_bd
 from tests.helpers import TEMP_ROOT
 from web.comprobantes.previews import (
     DURACION_SEGUNDOS, firmar, guardar_temporal, hash_opciones, limpiar_vencidas,
@@ -17,6 +18,10 @@ from web.comprobantes.previews import (
 
 
 class TestPreviews(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        preparar_bd()
+
     def test_archivo_privado_usa_nombre_aleatorio_y_limpieza(self):
         with tempfile.TemporaryDirectory(dir=TEMP_ROOT) as temporal:
             with override_settings(PREVIEW_DIR=Path(temporal)):

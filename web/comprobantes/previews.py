@@ -52,7 +52,7 @@ def guardar_temporal(archivo, sufijo: str) -> tuple[str, Path, str]:
 def ruta_temporal(identificador: str, sufijo: str) -> Path:
     if len(identificador) != 32 or any(c not in "0123456789abcdef" for c in identificador):
         raise ValueError("Vista previa no válida.")
-    if sufijo not in {".xlsx", ".xlsm", ".xls", ".csv", ".txt"}:
+    if sufijo not in {".xlsx", ".xlsm", ".xls", ".csv", ".txt", ".prn"}:
         raise ValueError("Vista previa no válida.")
     return directorio() / f"{identificador}{sufijo}"
 

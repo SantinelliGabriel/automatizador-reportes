@@ -78,3 +78,4 @@ FILE_UPLOAD_MAX_MEMORY_SIZE = 2_621_440
 PREVIEW_DIR = Path(os.getenv("DJANGO_PREVIEW_DIR", str(Path(tempfile.gettempdir()) / "automatizador-previews")))
 if PREVIEW_DIR.resolve().is_relative_to(BASE_DIR.resolve()):
     raise ImproperlyConfigured("DJANGO_PREVIEW_DIR debe estar fuera del proyecto.")
+HOLISTOR_MAPPING_PATH = Path(os.environ["DJANGO_HOLISTOR_MAPPING_PATH"]) if os.getenv("DJANGO_HOLISTOR_MAPPING_PATH") else None

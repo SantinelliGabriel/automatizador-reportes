@@ -1,0 +1,8 @@
+{% extends "comprobantes/base.html" %}
+{% block contenido %}
+<h1>{{ titulo }}</h1>
+<form method="post" enctype="multipart/form-data">{% csrf_token %}
+{{ formulario.as_p }}
+<button type="submit">Continuar</button>
+</form>
+{% endblock %}

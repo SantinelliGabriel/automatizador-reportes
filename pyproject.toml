@@ -45,6 +45,7 @@ packages = ["automatizador", "ejemplos", "web", "web.config", "web.comprobantes"
 
 [tool.setuptools.package-data]
 ejemplos = ["*.xlsx", "*.csv"]
+web = ["templates/comprobantes/*.html"]
 
 [tool.ruff]
 line-length = 120
