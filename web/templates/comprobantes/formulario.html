@@ -5,4 +5,18 @@
 {{ formulario.as_p }}
 <button type="submit">Continuar</button>
 </form>
+{% if titulo == "Subir comprobantes" %}
+<script>
+const origen = document.getElementById("id_origen");
+const operacion = document.getElementById("id_operacion");
+const mixto = operacion.querySelector('option[value="mixto"]');
+function actualizarOperacion() {
+  mixto.disabled = origen.value !== "estandar";
+  mixto.hidden = mixto.disabled;
+  if (mixto.disabled && operacion.value === "mixto") operacion.value = "ventas";
+}
+origen.addEventListener("change", actualizarOperacion);
+actualizarOperacion();
+</script>
+{% endif %}
 {% endblock %}

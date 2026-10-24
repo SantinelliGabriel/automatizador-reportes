@@ -17,6 +17,7 @@ from django.views.decorators.http import require_POST
 
 from automatizador.adaptadores import leer_comprobantes
 from automatizador.clientes import clave_cliente
+from automatizador.lotes import operaciones_aceptadas
 from automatizador.procesamiento import confirmar_importacion, previsualizar
 from web.comprobantes.forms import CargaForm, ClienteForm
 from web.comprobantes.models import Cliente
@@ -57,6 +58,11 @@ def _mapeo(origen):
 
 def _hash_mapeo(ruta):
     return hashlib.sha256(ruta.read_bytes()).hexdigest() if ruta else ""
+
+
+def _operaciones_del_plan(plan):
+    return tuple(sorted({operacion for archivo in plan.archivos if archivo.aplicar
+                         for operacion in operaciones_aceptadas({"comprobantes": archivo.comprobantes})}))
 
 
 def _leer_plan(meta):
@@ -118,12 +124,14 @@ def cargar(request):
             mapeo = _mapeo(datos["origen"])
             try:
                 filas = leer_comprobantes(ruta, datos["origen"], datos["operacion"], mapeo)
-            except (ValueError, OSError, ImportError):
+            except (ValueError, OSError, ImportError) as error:
+                if datos["operacion"] == "mixto":
+                    raise CargaRechazada("Mixto requiere una columna operación válida en cada fila.") from error
                 filas = None
             if filas is not None:
                 if len(filas) > 10000:
                     raise CargaRechazada("El archivo excede el límite de 10.000 filas.")
-                if "operacion" in filas and any(
+                if datos["operacion"] != "mixto" and "operacion" in filas and any(
                     str(valor).strip().casefold() != datos["operacion"]
                     for valor in filas["operacion"].dropna()
                 ):
@@ -132,6 +140,7 @@ def cargar(request):
                                  mapping_path=mapeo, cliente=cliente.nombre,
                                  nombre_archivo=datos["nombre_archivo"])
             _error_generico(plan)
+            operaciones = _operaciones_del_plan(plan)
             opciones = {"cliente_id": cliente.pk, "cliente_clave": clave_cliente(cliente.nombre),
                         "periodo": datos["periodo"], "origen": datos["origen"],
                         "operacion": datos["operacion"], "nombre_archivo": datos["nombre_archivo"],
@@ -143,7 +152,8 @@ def cargar(request):
             meta = {"id": identificador, "sufijo": datos["sufijo"], "sha256": sha256,
                     "plan_sha256": hash_plan(plan), "opciones": opciones,
                     "opciones_sha256": hash_opciones(opciones),
-                    "version": version_operacion(cliente, datos["periodo"], datos["operacion"])}
+                    "versiones": {operacion: version_operacion(cliente, datos["periodo"], operacion)
+                                 for operacion in operaciones}}
             meta["token"] = firmar({"id": identificador, "sha256": sha256,
                                     "plan_sha256": meta["plan_sha256"],
                                     "opciones_sha256": meta["opciones_sha256"],
@@ -174,6 +184,8 @@ def vista_previa(request):
     except (ValueError, signing.BadSignature, signing.SignatureExpired):
         return HttpResponseBadRequest("La vista previa venció o cambió. Volvé a subir el archivo.")
     archivo = plan.archivos[0]
+    cantidades_operacion = (archivo.comprobantes["operacion"].value_counts().to_dict()
+                           if "operacion" in archivo.comprobantes else {})
     return render(request, "comprobantes/vista_previa.html", {
         "cliente": cliente, "periodo": plan.periodo, "archivo": archivo,
         "validas": archivo.comprobantes.head(50).to_dict("records"),
@@ -181,6 +193,8 @@ def vista_previa(request):
         "columnas_validas": archivo.comprobantes.columns,
         "columnas_observadas": archivo.observaciones.columns,
         "cantidad_validas": len(archivo.comprobantes), "cantidad_observadas": len(archivo.observaciones),
+        "cantidades_operacion": sorted(cantidades_operacion.items()),
+        "operaciones_reemplazo": _operaciones_del_plan(plan),
         "token": meta["token"],
     })
 
@@ -214,8 +228,9 @@ def confirmar(request):
         return HttpResponse("La confirmación ya está en curso.", status=409)
     try:
         with transaction.atomic():
-            if version_operacion(cliente, plan.periodo, meta["opciones"]["operacion"]) != meta["version"]:
-                raise ValueError("Hay una importación más reciente. Volvé a revisar el archivo.")
+            for operacion in _operaciones_del_plan(plan):
+                if version_operacion(cliente, plan.periodo, operacion) != meta["versiones"][operacion]:
+                    raise ValueError("Hay una importación más reciente. Volvé a revisar el archivo.")
             confirmar_importacion(plan, RepositorioDjango())
         messages.success(request, "Importación confirmada.")
         return redirect("clientes")

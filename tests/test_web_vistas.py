@@ -191,6 +191,78 @@ class TestWebVistas(unittest.TestCase):
         self.assertNotIn("preview", self.navegador.session)
         self.assertEqual(Importacion.objects.count(), 0)
 
+    def test_ejemplo_mixto_muestra_operaciones_y_reemplaza_solo_presentes(self):
+        ejemplo = (Path(__file__).resolve().parents[1] / "ejemplos" / "Cliente Demo Norte.xlsx").read_bytes()
+
+        def cargar_ejemplo(operacion):
+            return self.navegador.post("/cargar/", {
+                "cliente": self.cliente.pk, "periodo": "2026-09", "origen": "estandar",
+                "operacion": operacion, "archivo": SimpleUploadedFile("ejemplo.xlsx", ejemplo),
+            })
+
+        self.assertEqual(cargar_ejemplo("mixto").status_code, 302)
+        vista = self.navegador.get("/vista-previa/")
+        self.assertEqual(vista.status_code, 200)
+        self.assertIn("compras: 1", vista.content.decode())
+        self.assertIn("ventas: 1", vista.content.decode())
+        self.assertIn("Operaciones que se reemplazarán: compras, ventas", vista.content.decode())
+        token = self.navegador.session["preview"]["token"]
+        self.assertEqual(self.navegador.post("/confirmar/", {"token": token}).status_code, 302)
+        repo = RepositorioDjango()
+        self.assertEqual(sorted(repo.consultar_comprobantes("2026-09")["operacion"]), ["compras", "ventas"])
+        self.assertEqual(Importacion.objects.get().operaciones, "compras,ventas")
+
+        self.assertEqual(self.subir([comprobante(numero=202)]).status_code, 302)
+        vista = self.navegador.get("/vista-previa/")
+        self.assertIn("Operaciones que se reemplazarán: ventas", vista.content.decode())
+        token = self.navegador.session["preview"]["token"]
+        self.assertEqual(self.navegador.post("/confirmar/", {"token": token}).status_code, 302)
+        actuales = repo.consultar_comprobantes("2026-09")
+        self.assertEqual(sorted(actuales["operacion"]), ["compras", "ventas"])
+        self.assertEqual(actuales.loc[actuales["operacion"] == "ventas", "numero"].tolist(), [202])
+
+        incompatible = cargar_ejemplo("ventas")
+        self.assertEqual(incompatible.status_code, 200)
+        self.assertIn(b"no coincide", incompatible.content)
+        self.assertNotIn("preview", self.navegador.session)
+
+    def test_mixto_detecta_cambio_concurrente_en_cualquiera_de_sus_operaciones(self):
+        ejemplo = (Path(__file__).resolve().parents[1] / "ejemplos" / "Cliente Demo Norte.xlsx").read_bytes()
+        respuesta = self.navegador.post("/cargar/", {"cliente": self.cliente.pk, "periodo": "2026-09",
+                                                 "origen": "estandar", "operacion": "mixto",
+                                                 "archivo": SimpleUploadedFile("ejemplo.xlsx", ejemplo)})
+        self.assertEqual(respuesta.status_code, 302)
+        token = self.navegador.session["preview"]["token"]
+        otro = Client()
+        otro.force_login(self.usuario)
+        compras = SimpleUploadedFile("compras.csv", pd.DataFrame([
+            comprobante(operacion="compras", numero=202)]).to_csv(index=False).encode())
+        self.assertEqual(otro.post("/cargar/", {"cliente": self.cliente.pk, "periodo": "2026-09",
+                                               "origen": "estandar", "operacion": "compras",
+                                               "archivo": compras}).status_code, 302)
+        self.assertEqual(otro.post("/confirmar/", {"token": otro.session["preview"]["token"]}).status_code, 302)
+        self.assertEqual(self.navegador.post("/confirmar/", {"token": token}).status_code, 409)
+        actuales = RepositorioDjango().consultar_comprobantes("2026-09")
+        self.assertEqual(actuales["operacion"].tolist(), ["compras"])
+        self.assertEqual(actuales["numero"].tolist(), [202])
+
+    def test_mixto_exige_operacion_por_fila_y_no_se_ofrece_a_arca_holistor(self):
+        for origen in ("arca", "holistor"):
+            with self.subTest(origen=origen):
+                respuesta = self.subir([comprobante()], origen=origen)
+                self.assertEqual(respuesta.status_code, 302)
+                archivo = SimpleUploadedFile("archivo.csv", pd.DataFrame([comprobante()]).to_csv(index=False).encode())
+                rechazo = self.navegador.post("/cargar/", {"cliente": self.cliente.pk, "periodo": "2026-09",
+                                                           "origen": origen, "operacion": "mixto", "archivo": archivo})
+                self.assertEqual(rechazo.status_code, 200)
+                self.assertIn(b"solo est", rechazo.content)
+        sin_operacion = pd.DataFrame([comprobante()]).drop(columns="operacion").to_csv(index=False).encode()
+        rechazo = self.navegador.post("/cargar/", {"cliente": self.cliente.pk, "periodo": "2026-09",
+                                                   "origen": "estandar", "operacion": "mixto",
+                                                   "archivo": SimpleUploadedFile("sin-operacion.csv", sin_operacion)})
+        self.assertEqual(rechazo.status_code, 200)
+        self.assertIn(b"requiere una columna", rechazo.content)
+
     def test_error_de_lectura_no_revela_ruta_temporal(self):
         archivo = SimpleUploadedFile("invalido.csv", b"columna_invalida\nvalor\n")
         respuesta = self.navegador.post("/cargar/", {"cliente": self.cliente.pk, "periodo": "2026-09",

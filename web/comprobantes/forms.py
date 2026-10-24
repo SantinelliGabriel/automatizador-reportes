@@ -26,11 +26,14 @@ class CargaForm(forms.Form):
                                help_text="Formato AAAA-MM")
     origen = forms.ChoiceField(choices=[("estandar", "Estándar"), ("arca", "ARCA"),
                                          ("holistor", "Holistor")])
-    operacion = forms.ChoiceField(choices=[("ventas", "Ventas"), ("compras", "Compras")])
+    operacion = forms.ChoiceField(choices=[("ventas", "Ventas"), ("compras", "Compras"),
+                                           ("mixto", "Mixto: según la columna del archivo (solo estándar)")])
     archivo = forms.FileField()
 
     def clean(self):
         datos = super().clean()
+        if datos.get("operacion") == "mixto" and datos.get("origen") != "estandar":
+            self.add_error("operacion", "Mixto solo está disponible para archivos estándar con operación por fila.")
         if datos.get("archivo") and datos.get("origen"):
             nombre, sufijo = validar_archivo(datos["archivo"], datos["origen"])
             datos["nombre_archivo"] = nombre

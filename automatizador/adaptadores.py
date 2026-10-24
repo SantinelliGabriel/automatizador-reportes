@@ -274,12 +274,22 @@ def _adaptar_holistor(path, operacion, mapping_path=None):
 def leer_comprobantes(path, formato="estandar", operacion="ventas", mapping_path=None):
     """Lee archivo y lo convierte a las columnas canónicas del importador."""
     formato = formato.casefold()
+    if operacion == "mixto" and formato != "estandar":
+        raise ValueError("Mixto solo admite archivos estándar con operación por fila.")
     if formato == "arca":
         return _mapear_arca(_leer(path), operacion)
     if formato == "holistor":
         return _adaptar_holistor(path, operacion, mapping_path)
     df = _leer(path)
     df = normalizar_columnas(df)
+    if operacion == "mixto":
+        if "operacion" not in df.columns or df["operacion"].isna().any():
+            raise ValueError("Mixto requiere una operación en cada fila del archivo.")
+        operaciones = df["operacion"].astype(str).str.strip().str.casefold()
+        if not operaciones.isin({"ventas", "compras"}).all():
+            raise ValueError("Mixto requiere ventas o compras en cada fila del archivo.")
+        df["operacion"] = operaciones
+        return df
     if "operacion" not in df.columns:
         df["operacion"] = operacion
     else:
