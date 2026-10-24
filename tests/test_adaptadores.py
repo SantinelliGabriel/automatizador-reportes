@@ -1,6 +1,8 @@
 import unittest
+import csv
 import json
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -163,6 +165,36 @@ class TestAdaptadorHolistor(unittest.TestCase):
 
 
 class TestLecturaArchivos(unittest.TestCase):
+    def test_mixto_solo_para_estandar_con_operacion_por_fila(self):
+        with directorio_temporal() as carpeta:
+            archivo = Path(carpeta) / "mixto.csv"
+            archivo.write_text("operacion,numero\nVentas,1\n compras ,2\n", encoding="utf-8")
+            self.assertEqual(leer_comprobantes(archivo, "estandar", "mixto")["operacion"].tolist(),
+                             ["ventas", "compras"])
+            for origen in ("arca", "holistor"):
+                with self.assertRaisesRegex(ValueError, "solo admite"):
+                    leer_comprobantes(archivo, origen, "mixto")
+            archivo.write_text("numero,total\n1,1\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "operación en cada fila"):
+                leer_comprobantes(archivo, "estandar", "mixto")
+
+    def test_xls_usa_xlrd(self):
+        with patch("automatizador.adaptadores.pd.read_excel", return_value=pd.DataFrame()) as lectura:
+            _leer(Path("sintetico.xls"))
+        self.assertEqual(lectura.call_args.kwargs["engine"], "xlrd")
+
+    def test_csv_sin_delimitador_entrega_error_controlado(self):
+        with patch("automatizador.adaptadores.pd.read_csv", side_effect=csv.Error("sin separador")):
+            with self.assertRaisesRegex(ValueError, "No se pudo interpretar"):
+                _leer(Path("sin-datos.csv"))
+
+    def test_excel_moderno_se_lee_solo_lectura_y_sin_enlaces(self):
+        with patch("automatizador.adaptadores.pd.read_excel", return_value=pd.DataFrame()) as lectura:
+            _leer(Path("sintetico.xlsx"))
+        self.assertEqual(lectura.call_args.kwargs["engine"], "openpyxl")
+        self.assertEqual(lectura.call_args.kwargs["engine_kwargs"],
+                         {"read_only": True, "data_only": True, "keep_links": False})
+
     def test_lee_csv_cp1252_y_rechaza_extension_desconocida(self):
         with directorio_temporal() as carpeta:
             archivo = Path(carpeta) / "latin1.csv"

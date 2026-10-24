@@ -9,6 +9,7 @@ from pathlib import Path
 import pandas as pd
 
 from automatizador.adaptadores import leer_comprobantes
+from automatizador.clientes import clave_cliente
 from automatizador.database import (
     MigracionBase,
     consultar_totales,
@@ -73,7 +74,8 @@ class ResultadoProcesamiento:
     conflictos: tuple[str, ...] = ()
 
 
-def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mapping_path=None):
+def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mapping_path=None,
+                  cliente=None, nombre_archivo=None):
     """Lee y valida archivos sin crear ni modificar la base de datos."""
     origen = Path(origen)
     if not origen.exists():
@@ -86,7 +88,8 @@ def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mappi
 
     previsualizados = []
     for archivo in archivos:
-        cliente = archivo.stem.strip()
+        cliente_actual = cliente if cliente is not None else archivo.stem.strip()
+        clave_cliente(cliente_actual)
         digest = hashlib.sha256()
         sha256 = ""
         aplicar = True
@@ -115,27 +118,29 @@ def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mappi
                 aceptados = aceptados.drop(columns=["_error_adaptador", "_fila_original"], errors="ignore")
             rechazados = rechazados.drop(columns=["_error_adaptador", "_fila_original"], errors="ignore")
             if "cliente" not in rechazados.columns:
-                rechazados.insert(0, "cliente", cliente)
+                rechazados.insert(0, "cliente", cliente_actual)
+            elif cliente is not None:
+                rechazados["cliente"] = cliente_actual
             if aceptados.empty and not rechazados.empty:
                 aplicar = False
         except (ValueError, OSError, ImportError) as error:
             aplicar = False
             aceptados = pd.DataFrame()
             rechazados = pd.DataFrame([{
-                "cliente": cliente,
-                "archivo": archivo.name,
+                "cliente": cliente_actual,
+                "archivo": nombre_archivo or archivo.name,
                 "fila_excel": "",
                 "motivo": f"No se pudo procesar el archivo: {error}",
             }])
         previsualizados.append(ArchivoPrevisualizado(
-            cliente=cliente,
-            nombre=archivo.name,
+            cliente=cliente_actual,
+            nombre=nombre_archivo or archivo.name,
             comprobantes=aceptados,
             observaciones=rechazados,
             aplicar=aplicar,
             sha256=sha256,
         ))
-        logging.info("%s: %s aceptados, %s observados.", cliente, len(aceptados), len(rechazados))
+        logging.info("Archivo previsualizado: %s aceptados, %s observados.", len(aceptados), len(rechazados))
     lotes = resolver_conflictos([{
         "cliente": archivo.cliente, "periodo": periodo, "comprobantes": archivo.comprobantes,
         "rechazados": archivo.observaciones, "aplicar": archivo.aplicar,

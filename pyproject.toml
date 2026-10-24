@@ -33,17 +33,19 @@ dev = [
   "coverage>=7.6,<8",
   "ruff>=0.14,<1",
 ]
-web = ["Django>=5.2.8,<6"]
+web = ["Django>=5.2.8,<6", "defusedxml>=0.7,<1"]
 
 [project.scripts]
 automatizador = "automatizador.cli:main"
 automatizador-demo = "automatizador.generar_datos_demo:main"
 
 [tool.setuptools]
-packages = ["automatizador", "ejemplos", "web", "web.config", "web.comprobantes", "web.comprobantes.migrations"]
+packages = ["automatizador", "ejemplos", "web", "web.config", "web.comprobantes",
+            "web.comprobantes.migrations", "web.comprobantes.management", "web.comprobantes.management.commands"]
 
 [tool.setuptools.package-data]
 ejemplos = ["*.xlsx", "*.csv"]
+web = ["templates/comprobantes/*.html"]
 
 [tool.ruff]
 line-length = 120

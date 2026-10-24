@@ -9,6 +9,30 @@ from tests.helpers import ROOT, comprobante, directorio_temporal
 
 
 class TestProcesamiento(unittest.TestCase):
+    def test_cliente_explicito_corrige_etiqueta_de_fila_observada(self):
+        with directorio_temporal() as carpeta:
+            entrada = Path(carpeta) / "archivo.csv"
+            fila = comprobante(fecha="2026-10-03", cliente="Cliente del Archivo")
+            pd.DataFrame([fila]).to_csv(entrada, index=False)
+            vista = previsualizar(entrada, "2026-09", cliente="Cliente Elegido")
+            self.assertEqual(vista.archivos[0].observaciones["cliente"].tolist(), ["Cliente Elegido"])
+
+    def test_entrada_inexistente_o_carpeta_sin_archivos(self):
+        with directorio_temporal() as carpeta:
+            with self.assertRaises(FileNotFoundError):
+                previsualizar(Path(carpeta) / "inexistente.csv", "2026-09")
+            with self.assertRaisesRegex(ValueError, "no contiene archivos"):
+                previsualizar(carpeta, "2026-09")
+
+    def test_cliente_explicito_conserva_nombre_visible_y_clave_compartida(self):
+        with directorio_temporal() as carpeta:
+            entrada = Path(carpeta) / "nombre-servidor.csv"
+            pd.DataFrame([comprobante()]).to_csv(entrada, index=False)
+            vista = previsualizar(entrada, "2026-09", cliente=" Cliente  Sintético ",
+                                  nombre_archivo="origen.csv")
+            self.assertEqual(vista.archivos[0].cliente, " Cliente  Sintético ")
+            self.assertEqual(vista.archivos[0].nombre, "origen.csv")
+
     def test_informa_operaciones_reemplazadas_y_conservadas(self):
         with directorio_temporal() as carpeta:
             carpeta = Path(carpeta)

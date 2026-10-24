@@ -91,13 +91,39 @@ automatizador \
 
 Más detalles de [adaptadores ARCA/Holistor](docs/adaptadores.md).
 
-## Interfaz web (en desarrollo)
+## Interfaz web (Django)
 
-La capa opcional de Django incluye modelos, migraciones y un repositorio de comprobantes. Todavía no tiene pantallas. Para instalar sus dependencias desde la raíz del repositorio:
+La interfaz local permite iniciar sesión, dar de alta clientes, subir comprobantes y revisar filas válidas y observadas antes de confirmar la importación. Usa el repositorio Django; la CLI y Streamlit funcionan sin esa dependencia. Desde la raíz del repositorio, creá y activá el entorno virtual como se indica en «Instalación y uso» e instalá la dependencia web:
 
 ```bash
 python -m pip install -e ".[web]"
 ```
+
+Para iniciarla en PowerShell, configurá las variables de entorno, aplicá las migraciones y creá el primer usuario. `createsuperuser` solicita nombre de usuario y contraseña en la terminal; no los guardes en el repositorio.
+
+```powershell
+$env:DJANGO_DEBUG = "1"
+$env:DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost"
+$env:DJANGO_SECRET_KEY = (& python -c "import secrets; print(secrets.token_urlsafe(64))")
+python web/manage.py migrate
+python web/manage.py createsuperuser
+python web/manage.py runserver
+```
+
+En macOS o Linux:
+
+```bash
+export DJANGO_DEBUG=1
+export DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost
+export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
+python web/manage.py migrate
+python web/manage.py createsuperuser
+python web/manage.py runserver
+```
+
+Abrí `http://127.0.0.1:8000/login/` e ingresá con ese usuario. `DJANGO_DEBUG=1` habilita el modo de desarrollo local. Fuera de ese modo, `DJANGO_SECRET_KEY` es obligatoria y `DJANGO_ALLOWED_HOSTS` debe contener los dominios permitidos; conservá la clave de forma segura fuera del repositorio.
+
+Para probar la carga web, creá un cliente y subí `ejemplos/Cliente Demo Norte.xlsx` con período `2026-09`, origen **Estándar** y operación **Mixto: según la columna del archivo**. El ejemplo contiene ventas y compras; la vista previa muestra cada operación antes de confirmar.
 
 ## Migración de la base
 
@@ -144,7 +170,7 @@ GitHub Actions ejecuta los controles en Linux y Windows.
 
 ```text
 automatizador/                  Paquete: lógica, CLI, adaptadores e interfaz
-web/                            Proyecto Django opcional: modelos y repositorio
+web/                            Proyecto Django opcional: modelos, repositorio e interfaz
 tests/                          Pruebas por módulo
 tests/fixtures/arca/            CSV sintético de Mis Comprobantes
 ejemplos/                       Entradas, salida y calendario sintéticos

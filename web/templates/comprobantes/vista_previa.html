@@ -1,0 +1,26 @@
+{% extends "comprobantes/base.html" %}
+{% block contenido %}
+<h1>Vista previa</h1>
+<p>Cliente: {{ cliente.nombre }} · Período: {{ periodo }} · Archivo: {{ archivo.nombre }}</p>
+<p>{{ cantidad_validas }} filas válidas; {{ cantidad_observadas }} observadas.</p>
+<h2>Comprobantes válidos por operación</h2>
+<ul>{% for operacion, cantidad in cantidades_operacion %}<li>{{ operacion }}: {{ cantidad }}</li>
+{% empty %}<li>No hay comprobantes válidos.</li>{% endfor %}</ul>
+<p>Operaciones que se reemplazarán: {% for operacion in operaciones_reemplazo %}{{ operacion }}{% if not forloop.last %}, {% endif %}{% empty %}ninguna{% endfor %}.</p>
+<h2>Válidas</h2><p>Se muestran las primeras 50 filas.</p>
+<div style="overflow-x:auto"><table><thead><tr>
+{% for columna in columnas_validas %}<th>{{ columna }}</th>{% endfor %}
+</tr></thead><tbody>{% for fila in validas %}<tr>
+{% for valor in fila.values %}<td>{{ valor }}</td>{% endfor %}
+</tr>{% empty %}<tr><td>No hay filas válidas.</td></tr>{% endfor %}</tbody></table></div>
+<h2>Observadas</h2><p>Se muestran las primeras 50 filas.</p>
+<div style="overflow-x:auto"><table><thead><tr>
+{% for columna in columnas_observadas %}<th>{{ columna }}</th>{% endfor %}
+</tr></thead><tbody>{% for fila in observadas %}<tr>
+{% for valor in fila.values %}<td>{{ valor }}</td>{% endfor %}
+</tr>{% empty %}<tr><td>No hay filas observadas.</td></tr>{% endfor %}</tbody></table></div>
+<form method="post" action="{% url 'confirmar' %}">{% csrf_token %}
+<input type="hidden" name="token" value="{{ token }}">
+<button type="submit">Confirmar importación</button>
+</form>
+{% endblock %}
