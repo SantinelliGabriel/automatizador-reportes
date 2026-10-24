@@ -1,6 +1,7 @@
 """Contrato HTTP de la primera etapa de la interfaz Django."""
 
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -285,6 +286,32 @@ class TestWebVistas(unittest.TestCase):
                                                    "archivo": SimpleUploadedFile("sin-operacion.csv", sin_operacion)})
         self.assertEqual(rechazo.status_code, 200)
         self.assertIn(b"requiere una columna", rechazo.content)
+
+    def test_csrf_httponly_y_formularios_sin_javascript(self):
+        self.assertTrue(settings.CSRF_COOKIE_HTTPONLY)
+        navegador = Client(enforce_csrf_checks=True)
+
+        def csrf(ruta):
+            respuesta = navegador.get(ruta)
+            self.assertEqual(respuesta.status_code, 200)
+            return re.search(rb'name="csrfmiddlewaretoken" value="([^"]+)"', respuesta.content).group(1).decode()
+
+        token = csrf("/login/")
+        self.assertTrue(navegador.cookies["csrftoken"]["httponly"])
+        self.assertEqual(navegador.post("/login/", {"username": "operador", "password": "clave-sintetica",
+                                                    "csrfmiddlewaretoken": token}).status_code, 302)
+        token = csrf("/clientes/nuevo/")
+        self.assertEqual(navegador.post("/clientes/nuevo/", {"nombre": "Otro Cliente Sintético", "cuit": "",
+                                                             "csrfmiddlewaretoken": token}).status_code, 302)
+        token = csrf("/cargar/")
+        archivo = SimpleUploadedFile("archivo.csv", pd.DataFrame([comprobante()]).to_csv(index=False).encode())
+        self.assertEqual(navegador.post("/cargar/", {"cliente": self.cliente.pk, "periodo": "2026-09",
+                                                     "origen": "estandar", "operacion": "ventas", "archivo": archivo,
+                                                     "csrfmiddlewaretoken": token}).status_code, 302)
+        token = csrf("/vista-previa/")
+        firmado = navegador.session["preview"]["token"]
+        self.assertEqual(navegador.post("/confirmar/", {"token": firmado,
+                                                        "csrfmiddlewaretoken": token}).status_code, 302)
 
     def test_error_de_lectura_no_revela_ruta_temporal(self):
         archivo = SimpleUploadedFile("invalido.csv", b"columna_invalida\nvalor\n")
