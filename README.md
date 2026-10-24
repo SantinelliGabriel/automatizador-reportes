@@ -123,6 +123,8 @@ python web/manage.py runserver
 
 Abrí `http://127.0.0.1:8000/login/` e ingresá con ese usuario. `DJANGO_DEBUG=1` habilita el modo de desarrollo local. Fuera de ese modo, `DJANGO_SECRET_KEY` es obligatoria y `DJANGO_ALLOWED_HOSTS` debe contener los dominios permitidos; conservá la clave de forma segura fuera del repositorio.
 
+Para probar la carga web, creá un cliente y subí `ejemplos/Cliente Demo Norte.xlsx` con período `2026-09`, origen **Estándar** y operación **Mixto: según la columna del archivo**. El ejemplo contiene ventas y compras; la vista previa muestra cada operación antes de confirmar.
+
 ## Migración de la base
 
 Al abrir una base SQLite anterior, el programa migra su esquema y crea un respaldo `.v0.bak.db`, `.v1.bak.db` o `.v2.bak.db`, según la versión de origen, antes de hacerlo. La CLI y la interfaz local muestran la ruta del respaldo; conservá esa copia hasta revisar los informes generados. La migración a v3 registra en el historial las operaciones que todavía pueden identificarse por sus comprobantes; las importaciones antiguas sin comprobantes asociados quedan con la operación vacía.
