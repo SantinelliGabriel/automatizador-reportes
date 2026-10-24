@@ -7,6 +7,7 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import pandas as pd
 
@@ -15,12 +16,13 @@ from tests.django_utils import limpiar_bd, preparar_bd
 from django.contrib.auth.models import User
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.db import IntegrityError
 from django.test import Client, override_settings
 from django.conf import settings
 
 from tests.helpers import TEMP_ROOT, comprobante
 from web.comprobantes.models import Cliente, Importacion
-from web.comprobantes.previews import DURACION_SEGUNDOS
+from web.comprobantes.previews import DURACION_SEGUNDOS, firmar
 from web.comprobantes.repositorio import RepositorioDjango
 
 
@@ -47,6 +49,11 @@ class TestWebVistas(unittest.TestCase):
         return self.navegador.post("/cargar/", {"cliente": self.cliente.pk, "periodo": "2026-09",
                                               "origen": "estandar", "operacion": "ventas", "archivo": archivo})
 
+    def subir(self, filas, *, periodo="2026-09", origen="estandar", nombre="archivo.csv"):
+        archivo = SimpleUploadedFile(nombre, pd.DataFrame(filas).to_csv(index=False).encode("utf-8"))
+        return self.navegador.post("/cargar/", {"cliente": self.cliente.pk, "periodo": periodo,
+                                              "origen": origen, "operacion": "ventas", "archivo": archivo})
+
     def test_urls_privadas_redirigen_al_login(self):
         anonimo = Client()
         for ruta in ("/", "/clientes/nuevo/", "/cargar/", "/vista-previa/", "/confirmar/"):
@@ -54,7 +61,13 @@ class TestWebVistas(unittest.TestCase):
                 respuesta = anonimo.get(ruta)
                 self.assertEqual(respuesta.status_code, 302)
                 self.assertIn("/login/", respuesta["Location"])
+        for ruta in ("/clientes/nuevo/", "/cargar/", "/confirmar/"):
+            with self.subTest(post=ruta):
+                respuesta = anonimo.post(ruta)
+                self.assertEqual(respuesta.status_code, 302)
+                self.assertIn("/login/", respuesta["Location"])
         self.assertIn("/admin/login/", anonimo.get("/admin/")["Location"])
+        self.assertEqual(self.navegador.get("/vista-previa/").status_code, 400)
 
     def test_login_y_alta_de_cliente_con_clave_compartida(self):
         anonimo = Client()
@@ -65,6 +78,12 @@ class TestWebVistas(unittest.TestCase):
                          302)
         self.assertEqual(Cliente.objects.get(nombre_clave="cliente á").nombre, "Cliente   Á")
         respuesta = anonimo.post("/clientes/nuevo/", {"nombre": "cliente á", "cuit": ""})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn(b"Ya existe un cliente", respuesta.content)
+
+    def test_alta_cliente_informa_una_colision_de_base(self):
+        with patch("web.comprobantes.views.ClienteForm.save", side_effect=IntegrityError):
+            respuesta = self.navegador.post("/clientes/nuevo/", {"nombre": "Otro Cliente Sintético", "cuit": ""})
         self.assertEqual(respuesta.status_code, 200)
         self.assertIn(b"Ya existe un cliente", respuesta.content)
 
@@ -110,6 +129,61 @@ class TestWebVistas(unittest.TestCase):
         self.assertFalse(list(Path(self.temporal.name).glob("*.csv")))
         self.assertIn("no-store", vista["Cache-Control"])
 
+    def test_token_firmado_vencido_impide_ver_y_confirmar(self):
+        with patch("django.core.signing.time.time", return_value=time.time() - DURACION_SEGUNDOS - 1):
+            self.assertEqual(self.carga().status_code, 302)
+        token = self.navegador.session["preview"]["token"]
+        self.assertEqual(self.navegador.get("/vista-previa/").status_code, 400)
+        self.assertEqual(self.navegador.post("/confirmar/", {"token": token}).status_code, 400)
+        self.assertEqual(Importacion.objects.count(), 0)
+
+    def test_doble_envio_del_mismo_token_toma_candado(self):
+        self.carga()
+        meta = self.navegador.session["preview"]
+        ruta = Path(self.temporal.name) / f"{meta['id']}{meta['sufijo']}"
+        candado = Path(str(ruta) + ".lock")
+        candado.touch()
+        try:
+            self.assertEqual(self.navegador.post("/confirmar/", {"token": meta["token"]}).status_code, 409)
+            self.assertEqual(Importacion.objects.count(), 0)
+        finally:
+            candado.unlink()
+        self.assertEqual(self.navegador.post("/confirmar/", {"token": meta["token"]}).status_code, 302)
+
+    def test_token_y_opciones_firmadas_deben_coincidir(self):
+        self.carga()
+        sesion = self.navegador.session
+        meta = sesion["preview"]
+        meta["token"] = firmar({"id": "otro-token-sintetico"})
+        sesion["preview"] = meta
+        sesion.save()
+        self.assertEqual(self.navegador.post("/confirmar/", {"token": meta["token"]}).status_code, 400)
+        self.carga()
+        sesion = self.navegador.session
+        meta = sesion["preview"]
+        meta["opciones"]["periodo"] = "2026-10"
+        sesion["preview"] = meta
+        sesion.save()
+        self.assertEqual(self.navegador.post("/confirmar/", {"token": meta["token"]}).status_code, 400)
+        self.assertEqual(Importacion.objects.count(), 0)
+
+    def test_cambio_de_cliente_o_del_resultado_obliga_a_revisar(self):
+        self.carga()
+        self.cliente.nombre = "Cliente Renombrado Sintético"
+        self.cliente.save()
+        self.assertEqual(self.navegador.get("/vista-previa/").status_code, 400)
+        self.carga()
+        with patch("web.comprobantes.views.hash_plan", return_value="hash-distinto"):
+            self.assertEqual(self.navegador.get("/vista-previa/").status_code, 400)
+
+    def test_cambio_de_mapeo_holistor_invalida_la_vista(self):
+        mapeo = Path(self.temporal.name) / "mapeo-sintetico.json"
+        mapeo.write_text('{"columnas": {}}', encoding="utf-8")
+        with override_settings(HOLISTOR_MAPPING_PATH=mapeo):
+            self.assertEqual(self.subir([comprobante()], origen="holistor").status_code, 302)
+            mapeo.write_text('{"columnas": {"Fecha": "fecha"}}', encoding="utf-8")
+            self.assertEqual(self.navegador.get("/vista-previa/").status_code, 400)
+
     def test_operacion_incompatible_bloquea_confirmacion(self):
         respuesta = self.carga(operacion="compras")
         self.assertEqual(respuesta.status_code, 200)
@@ -127,6 +201,65 @@ class TestWebVistas(unittest.TestCase):
         self.assertEqual(vista.status_code, 200)
         self.assertIn(b"No se pudo interpretar el archivo", vista.content)
         self.assertNotIn(str(self.temporal.name).encode(), vista.content)
+
+    def test_error_inesperado_de_carga_no_expone_ruta_y_limpia(self):
+        ruta_privada = str(Path(self.temporal.name) / "contenido-sintetico.csv")
+        with patch("web.comprobantes.views.guardar_temporal", side_effect=OSError(ruta_privada)):
+            respuesta = self.carga()
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn(b"No se pudo procesar el archivo", respuesta.content)
+        self.assertNotIn(ruta_privada.encode(), respuesta.content)
+        with patch("web.comprobantes.views._hash_mapeo", side_effect=ValueError(ruta_privada)):
+            respuesta = self.carga()
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertNotIn(ruta_privada.encode(), respuesta.content)
+        self.assertEqual(list(Path(self.temporal.name).glob("*.csv")), [])
+
+    def test_log_de_carga_no_incluye_cuit_razon_social_ni_importe(self):
+        fila = comprobante(razon_social="Entidad Ficticia Reservada", total=121000)
+        with self.assertLogs(level="INFO") as capturado:
+            self.assertEqual(self.subir([fila]).status_code, 302)
+        mensajes = "\n".join(capturado.output)
+        self.assertNotIn(fila["cuit"], mensajes)
+        self.assertNotIn(fila["razon_social"], mensajes)
+        self.assertNotIn("121000", mensajes)
+
+    def test_csv_sin_datos_observado_y_codificacion_invalida_rechazada(self):
+        archivo = SimpleUploadedFile("vacio.csv", b"\n")
+        respuesta = self.navegador.post("/cargar/", {"cliente": self.cliente.pk, "periodo": "2026-09",
+                                                      "origen": "estandar", "operacion": "ventas", "archivo": archivo})
+        self.assertEqual(respuesta.status_code, 302)
+        self.assertIn(b"No se pudo interpretar", self.navegador.get("/vista-previa/").content)
+        invalido = SimpleUploadedFile("invalido.csv", b"fecha,numero\n\x81,2")
+        respuesta = self.navegador.post("/cargar/", {"cliente": self.cliente.pk, "periodo": "2026-09",
+                                                      "origen": "estandar", "operacion": "ventas", "archivo": invalido})
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn(b"codificaci", respuesta.content)
+
+    def test_archivo_con_mas_de_diez_mil_filas_no_genera_vista(self):
+        respuesta = self.subir([comprobante()] * 10001)
+        self.assertEqual(respuesta.status_code, 200)
+        self.assertIn(b"10.000 filas", respuesta.content)
+        self.assertEqual(Importacion.objects.count(), 0)
+
+    def test_nueva_carga_elimina_la_vista_anterior(self):
+        self.carga()
+        primera = self.navegador.session["preview"]
+        ruta = Path(self.temporal.name) / f"{primera['id']}{primera['sufijo']}"
+        self.assertTrue(ruta.exists())
+        self.carga(numero=2)
+        self.assertFalse(ruta.exists())
+
+    def test_mismo_cliente_en_dos_periodos_no_reemplaza_el_anterior(self):
+        self.carga()
+        primero = self.navegador.session["preview"]["token"]
+        self.assertEqual(self.navegador.post("/confirmar/", {"token": primero}).status_code, 302)
+        self.assertEqual(self.subir([comprobante(numero=2, fecha="2026-10-03")],
+                                   periodo="2026-10").status_code, 302)
+        segundo = self.navegador.session["preview"]["token"]
+        self.assertEqual(self.navegador.post("/confirmar/", {"token": segundo}).status_code, 302)
+        self.assertEqual(RepositorioDjango().consultar_comprobantes("2026-09")["numero"].tolist(), [101])
+        self.assertEqual(RepositorioDjango().consultar_comprobantes("2026-10")["numero"].tolist(), [2])
 
     def test_vencimiento_y_limpieza_por_comando(self):
         self.carga()

@@ -140,7 +140,7 @@ def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mappi
             aplicar=aplicar,
             sha256=sha256,
         ))
-        logging.info("%s: %s aceptados, %s observados.", cliente_actual, len(aceptados), len(rechazados))
+        logging.info("Archivo previsualizado: %s aceptados, %s observados.", len(aceptados), len(rechazados))
     lotes = resolver_conflictos([{
         "cliente": archivo.cliente, "periodo": periodo, "comprobantes": archivo.comprobantes,
         "rechazados": archivo.observaciones, "aplicar": archivo.aplicar,

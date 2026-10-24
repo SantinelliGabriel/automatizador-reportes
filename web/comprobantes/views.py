@@ -27,6 +27,10 @@ from web.comprobantes.previews import (
 from web.comprobantes.repositorio import RepositorioDjango
 
 
+class CargaRechazada(ValueError):
+    """Error de validación con mensaje apto para mostrar al usuario."""
+
+
 def solo_operador(vista):
     @login_required
     @wraps(vista)
@@ -108,8 +112,9 @@ def cargar(request):
         datos = formulario.cleaned_data
         cliente = datos["cliente"]
         archivo = datos["archivo"]
-        identificador, ruta, sha256 = guardar_temporal(archivo, datos["sufijo"])
+        ruta = None
         try:
+            identificador, ruta, sha256 = guardar_temporal(archivo, datos["sufijo"])
             mapeo = _mapeo(datos["origen"])
             try:
                 filas = leer_comprobantes(ruta, datos["origen"], datos["operacion"], mapeo)
@@ -117,12 +122,12 @@ def cargar(request):
                 filas = None
             if filas is not None:
                 if len(filas) > 10000:
-                    raise ValueError("El archivo excede el límite de 10.000 filas.")
+                    raise CargaRechazada("El archivo excede el límite de 10.000 filas.")
                 if "operacion" in filas and any(
                     str(valor).strip().casefold() != datos["operacion"]
                     for valor in filas["operacion"].dropna()
                 ):
-                    raise ValueError("La operación del archivo no coincide con la elegida.")
+                    raise CargaRechazada("La operación del archivo no coincide con la elegida.")
             plan = previsualizar(ruta, datos["periodo"], datos["origen"], datos["operacion"],
                                  mapping_path=mapeo, cliente=cliente.nombre,
                                  nombre_archivo=datos["nombre_archivo"])
@@ -145,9 +150,14 @@ def cargar(request):
                                     "usuario": request.user.pk, "sesion": request.session.session_key})
             request.session["preview"] = meta
             return redirect("vista_previa")
-        except (ValueError, OSError) as error:
-            ruta.unlink(missing_ok=True)
+        except CargaRechazada as error:
+            if ruta:
+                ruta.unlink(missing_ok=True)
             formulario.add_error("archivo", str(error))
+        except (ValueError, OSError):
+            if ruta:
+                ruta.unlink(missing_ok=True)
+            formulario.add_error("archivo", "No se pudo procesar el archivo. Revisá el formato.")
     return render(request, "comprobantes/formulario.html", {"formulario": formulario,
                                                              "titulo": "Subir comprobantes"})
 
