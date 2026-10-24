@@ -1,5 +1,6 @@
 """Lectores para Excel común, Mis Comprobantes de ARCA y plantillas Holistor."""
 
+import csv
 import json
 import re
 import unicodedata
@@ -82,7 +83,12 @@ def _leer(path, sheet_name=0):
         try:
             return pd.read_csv(path, sep=None, engine="python", dtype=str, encoding="utf-8-sig")
         except UnicodeDecodeError:
-            return pd.read_csv(path, sep=None, engine="python", dtype=str, encoding="cp1252")
+            try:
+                return pd.read_csv(path, sep=None, engine="python", dtype=str, encoding="cp1252")
+            except csv.Error as error:
+                raise ValueError("No se pudo interpretar el archivo de texto.") from error
+        except csv.Error as error:
+            raise ValueError("No se pudo interpretar el archivo de texto.") from error
     if path.suffix.casefold() in {".xlsx", ".xlsm", ".xls"}:
         if path.suffix.casefold() in {".xlsx", ".xlsm"}:
             return pd.read_excel(path, sheet_name=sheet_name, engine="openpyxl",

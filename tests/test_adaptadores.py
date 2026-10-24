@@ -164,6 +164,18 @@ class TestAdaptadorHolistor(unittest.TestCase):
 
 
 class TestLecturaArchivos(unittest.TestCase):
+    def test_xls_usa_xlrd(self):
+        with patch("automatizador.adaptadores.pd.read_excel", return_value=pd.DataFrame()) as lectura:
+            _leer(Path("sintetico.xls"))
+        self.assertEqual(lectura.call_args.kwargs["engine"], "xlrd")
+
+    def test_csv_sin_delimitador_entrega_error_controlado(self):
+        with directorio_temporal() as carpeta:
+            archivo = Path(carpeta) / "sin-datos.csv"
+            archivo.write_text("\n", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "No se pudo interpretar"):
+                _leer(archivo)
+
     def test_excel_moderno_se_lee_solo_lectura_y_sin_enlaces(self):
         with patch("automatizador.adaptadores.pd.read_excel", return_value=pd.DataFrame()) as lectura:
             _leer(Path("sintetico.xlsx"))

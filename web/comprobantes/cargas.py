@@ -57,6 +57,16 @@ def validar_archivo(archivo, formato: str) -> tuple[str, str]:
     elif sufijo == ".xls":
         if encabezado != b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1":
             raise ValidationError("El archivo Excel no tiene una estructura válida.")
-    elif b"\x00" in encabezado:
-        raise ValidationError("El archivo de texto no tiene una estructura válida.")
+    else:
+        contenido = archivo.read()
+        archivo.seek(0)
+        if b"\x00" in contenido:
+            raise ValidationError("El archivo de texto no tiene una estructura válida.")
+        try:
+            contenido.decode("utf-8-sig")
+        except UnicodeDecodeError:
+            try:
+                contenido.decode("cp1252")
+            except UnicodeDecodeError as error:
+                raise ValidationError("La codificación del archivo de texto no es válida.") from error
     return nombre, sufijo
