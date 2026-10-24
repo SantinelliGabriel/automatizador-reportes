@@ -60,6 +60,8 @@ USE_TZ = True
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 STATIC_URL = "static/"
 STATIC_ROOT = BASE_DIR / "staticfiles"
+MEDIA_URL = "media/"
+MEDIA_ROOT = Path(os.getenv("DJANGO_MEDIA_ROOT", str(BASE_DIR / "media")))
 LOGIN_URL = "login"
 LOGIN_REDIRECT_URL = "clientes"
 LOGOUT_REDIRECT_URL = "login"
@@ -76,6 +78,9 @@ SECURE_REFERRER_POLICY = "same-origin"
 DATA_UPLOAD_MAX_MEMORY_SIZE = 12 * 1024 * 1024
 FILE_UPLOAD_MAX_MEMORY_SIZE = 2_621_440
 PREVIEW_DIR = Path(os.getenv("DJANGO_PREVIEW_DIR", str(Path(tempfile.gettempdir()) / "automatizador-previews")))
-if PREVIEW_DIR.resolve().is_relative_to(BASE_DIR.resolve()):
-    raise ImproperlyConfigured("DJANGO_PREVIEW_DIR debe estar fuera del proyecto.")
+if os.name == "nt" and not PREVIEW_DIR.resolve().is_relative_to(Path(tempfile.gettempdir()).resolve()):
+    raise ImproperlyConfigured("DJANGO_PREVIEW_DIR debe estar dentro del directorio temporal del usuario en Windows.")
+for ruta_servida in (BASE_DIR, STATIC_ROOT, MEDIA_ROOT):
+    if PREVIEW_DIR.resolve().is_relative_to(ruta_servida.resolve()):
+        raise ImproperlyConfigured("DJANGO_PREVIEW_DIR debe estar fuera del proyecto y de rutas servidas.")
 HOLISTOR_MAPPING_PATH = Path(os.environ["DJANGO_HOLISTOR_MAPPING_PATH"]) if os.getenv("DJANGO_HOLISTOR_MAPPING_PATH") else None

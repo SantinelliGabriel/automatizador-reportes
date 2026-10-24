@@ -20,6 +20,8 @@ SAL = "automatizador-vista-previa-v1"
 def directorio() -> Path:
     ruta = settings.PREVIEW_DIR
     ruta.mkdir(mode=0o700, parents=True, exist_ok=True)
+    if os.name != "nt":
+        os.chmod(ruta, 0o700)
     return ruta
 
 
@@ -41,11 +43,15 @@ def guardar_temporal(archivo, sufijo: str) -> tuple[str, Path, str]:
     identificador = uuid.uuid4().hex
     ruta = directorio() / f"{identificador}{sufijo}"
     digest = hashlib.sha256()
-    with ruta.open("xb") as destino:
-        for bloque in archivo.chunks():
-            digest.update(bloque)
-            destino.write(bloque)
-    os.chmod(ruta, 0o600)
+    descriptor = os.open(ruta, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    try:
+        with os.fdopen(descriptor, "wb") as destino:
+            for bloque in archivo.chunks():
+                digest.update(bloque)
+                destino.write(bloque)
+    except Exception:
+        ruta.unlink(missing_ok=True)
+        raise
     return identificador, ruta, digest.hexdigest()
 
 
