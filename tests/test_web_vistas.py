@@ -191,6 +191,29 @@ class TestWebVistas(unittest.TestCase):
         self.assertNotIn("preview", self.navegador.session)
         self.assertEqual(Importacion.objects.count(), 0)
 
+    def test_nombre_con_directorio_se_sanea_y_solo_escribe_temporal_privado(self):
+        contenido = (Path(__file__).resolve().parents[1] / "ejemplos" / "Cliente Demo Norte.xlsx").read_bytes()
+        limite = "limite-sintetico"
+        partes = [f'--{limite}\r\nContent-Disposition: form-data; name="{campo}"\r\n\r\n{valor}\r\n'.encode()
+                  for campo, valor in {"cliente": self.cliente.pk, "periodo": "2026-09", "origen": "estandar",
+                                       "operacion": "mixto"}.items()]
+        partes.extend([f'--{limite}\r\nContent-Disposition: form-data; name="archivo"; '
+                       'filename="../x.xlsx"\r\nContent-Type: application/octet-stream\r\n\r\n'.encode() + contenido + b"\r\n",
+                       f'--{limite}--\r\n'.encode()])
+        respuesta = self.navegador.generic("POST", "/cargar/", b"".join(partes),
+                                          content_type=f"multipart/form-data; boundary={limite}")
+        self.assertEqual(respuesta.status_code, 302)
+        meta = self.navegador.session["preview"]
+        self.assertEqual(meta["opciones"]["nombre_archivo"], "x.xlsx")
+        ruta = Path(self.temporal.name) / f"{meta['id']}{meta['sufijo']}"
+        self.assertTrue(ruta.is_file())
+        self.assertTrue(ruta.resolve().is_relative_to(Path(self.temporal.name).resolve()))
+        self.assertRegex(ruta.name, r"^[0-9a-f]{32}\.xlsx$")
+        self.assertEqual(list(Path(self.temporal.name).iterdir()), [ruta])
+        self.assertFalse((Path(self.temporal.name).parent / "x.xlsx").exists())
+        self.assertEqual(self.navegador.post("/confirmar/", {"token": meta["token"]}).status_code, 302)
+        self.assertEqual(Importacion.objects.get().archivo_origen, "x.xlsx")
+
     def test_ejemplo_mixto_muestra_operaciones_y_reemplaza_solo_presentes(self):
         ejemplo = (Path(__file__).resolve().parents[1] / "ejemplos" / "Cliente Demo Norte.xlsx").read_bytes()
 
