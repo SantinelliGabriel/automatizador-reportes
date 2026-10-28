@@ -1,18 +1,36 @@
+{% load static %}
 <!doctype html>
 <html lang="es">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Automatizador de comprobantes</title></head>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block titulo_pagina %}Automatizador de comprobantes{% endblock %}</title>
+  <link rel="stylesheet" href="{% static 'comprobantes/web.css' %}">
+</head>
 <body>
-<header><strong>Automatizador de comprobantes</strong>
-{% if user.is_authenticated %}
-<nav><a href="{% url 'clientes' %}">Clientes</a>
-<a href="{% url 'historial' %}">Historial</a> <a href="{% url 'observaciones' %}">Observaciones</a>
-{% if user.is_staff and not DEMO_MODE %}<a href="{% url 'cargar' %}">Subir archivo</a>{% endif %}
-<form action="{% url 'logout' %}" method="post">{% csrf_token %}<button type="submit">Salir</button></form>
-</nav>{% endif %}</header>
-<main>
-{% if DEMO_MODE %}<p role="status"><strong>Modo demo: datos ficticios, solo lectura</strong></p>{% endif %}
-{% for mensaje in messages %}<p role="status">{{ mensaje }}</p>{% endfor %}
-{% block contenido %}{% endblock %}
+<a class="skip-link" href="#contenido">Saltar al contenido</a>
+<header class="site-header">
+  <div class="site-header__inner">
+    <a class="brand" href="{% url 'clientes' %}">Automatizador <span>de comprobantes</span></a>
+    {% if user.is_authenticated %}
+    {% with current=request.resolver_match.url_name %}
+    <nav class="main-nav" aria-label="Navegación principal">
+      <a href="{% url 'clientes' %}" {% if current == 'clientes' or current == 'cliente_nuevo' %}aria-current="page"{% endif %}>Clientes</a>
+      {% if user.is_staff and not DEMO_MODE %}<a href="{% url 'cargar' %}" {% if current == 'cargar' or current == 'vista_previa' %}aria-current="page"{% endif %}>Cargar</a>{% endif %}
+      <a href="{% url 'historial' %}" {% if current == 'historial' %}aria-current="page"{% endif %}>Historial</a>
+      <a href="{% url 'observaciones' %}" {% if current == 'observaciones' %}aria-current="page"{% endif %}>Observaciones</a>
+      <a href="{% url 'informes' %}" {% if current == 'informes' or current == 'descargar_informe' %}aria-current="page"{% endif %}>Informe</a>
+    </nav>
+    {% endwith %}
+    <form class="logout-form" action="{% url 'logout' %}" method="post">{% csrf_token %}<button class="button button--quiet" type="submit">Salir</button></form>
+    {% endif %}
+  </div>
+</header>
+<main id="contenido" class="page-shell">
+  {% if DEMO_MODE %}<p class="demo-notice" role="status">Modo demo: datos ficticios, solo lectura</p>{% endif %}
+  {% for mensaje in messages %}<p class="alert alert--{{ mensaje.tags|default:'info' }}" role="status">{{ mensaje }}</p>{% endfor %}
+  {% block contenido %}{% endblock %}
 </main>
-</body></html>
+<footer class="site-footer"><div class="site-footer__inner"><span>Herramienta de apoyo a la revisión contable</span><span>Versión {{ VERSION_APP }}</span></div></footer>
+</body>
+</html>

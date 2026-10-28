@@ -65,6 +65,14 @@ jobs:
       - name: Check Django migrations
         run: python web/manage.py makemigrations --check --dry-run
 
+      - name: Collect local static resources
+        env:
+          DJANGO_DEBUG: '0'
+          DJANGO_ALLOWED_HOSTS: example.test
+          DJANGO_SECRET_KEY: ci-static-synthetic-key-2821a9adbe154bc5a883bfeaf4
+          DJANGO_STATIC_ROOT: ${{ runner.temp }}/automatizador-static
+        run: python web/manage.py collectstatic --noinput
+
       - name: Show coverage summary
         run: coverage report -m
 

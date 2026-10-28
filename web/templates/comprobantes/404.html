@@ -1,0 +1,5 @@
+{% extends "comprobantes/base.html" %}
+{% block titulo_pagina %}Página no encontrada · Automatizador{% endblock %}
+{% block contenido %}
+<section class="panel error-panel"><p class="error-panel__code">ERROR 404</p><h1>Página no encontrada</h1><p class="lede">La dirección solicitada no está disponible.</p><a class="button" href="{% url 'clientes' %}">Volver a clientes</a></section>
+{% endblock %}

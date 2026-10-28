@@ -1,10 +1,16 @@
 {% extends "comprobantes/base.html" %}
+{% block titulo_pagina %}Observaciones · Automatizador{% endblock %}
 {% block contenido %}
-<h1>Observaciones vigentes</h1>
-<form method="get"><label>Período <input name="periodo" value="{{ periodo }}" placeholder="AAAA-MM"></label>
-<label>Cliente <select name="cliente"><option value="">Todos</option>{% for item in clientes %}<option value="{{ item.nombre }}" {% if cliente == item.nombre %}selected{% endif %}>{{ item.nombre }}</option>{% endfor %}</select></label>
-<label>Operación <select name="operacion"><option value="">Todas</option><option value="ventas" {% if operacion == "ventas" %}selected{% endif %}>Ventas</option><option value="compras" {% if operacion == "compras" %}selected{% endif %}>Compras</option></select></label><button type="submit">Filtrar</button></form>
-{% if observaciones %}<table><thead><tr><th>Cliente</th><th>Período</th><th>Operación</th><th>Fila</th><th>Motivo</th><th>Archivo de origen</th></tr></thead><tbody>
-{% for fila in observaciones %}<tr><td>{{ fila.cliente }}</td><td>{{ fila.periodo }}</td><td>{{ fila.operacion|default:"Sin identificar" }}</td><td>{{ fila.fila_excel }}</td><td>{{ fila.motivo }}</td><td>{{ fila.archivo_origen }}</td></tr>{% endfor %}
-</tbody></table>{% include "comprobantes/_paginacion.html" %}{% else %}<p>No hay observaciones vigentes para este filtro. <a href="{% url 'historial' %}">Ver historial</a>.</p>{% endif %}
+<div class="page-heading"><div><p class="eyebrow">Revisión</p><h1>Observaciones vigentes</h1><p class="lede">Filas que necesitan revisión según las últimas importaciones de cada operación.</p></div></div>
+<section class="panel"><form class="filter-bar" method="get">
+  <label for="filtro-periodo">Período <input id="filtro-periodo" name="periodo" value="{{ periodo }}" placeholder="AAAA-MM" inputmode="numeric"></label>
+  <label for="filtro-cliente">Cliente <select id="filtro-cliente" name="cliente"><option value="">Todos</option>{% for item in clientes %}<option value="{{ item.nombre }}" {% if cliente == item.nombre %}selected{% endif %}>{{ item.nombre }}</option>{% endfor %}</select></label>
+  <label for="filtro-operacion">Operación <select id="filtro-operacion" name="operacion"><option value="">Todas</option><option value="ventas" {% if operacion == "ventas" %}selected{% endif %}>Ventas</option><option value="compras" {% if operacion == "compras" %}selected{% endif %}>Compras</option></select></label>
+  <button class="button" type="submit">Filtrar</button>
+</form></section>
+<section class="section-block">
+{% if observaciones %}<div class="table-scroll"><table class="data-table"><thead><tr><th scope="col">Cliente</th><th scope="col">Período</th><th scope="col">Operación</th><th scope="col">Fila</th><th scope="col">Motivo</th><th scope="col">Archivo de origen</th></tr></thead><tbody>
+{% for fila in observaciones %}<tr><td>{{ fila.cliente }}</td><td>{{ fila.periodo }}</td><td>{{ fila.operacion|default:"Sin identificar" }}</td><td class="numeric">{{ fila.fila_excel }}</td><td>{{ fila.motivo }}</td><td>{{ fila.archivo_origen }}</td></tr>{% endfor %}
+</tbody></table></div>{% include "comprobantes/_paginacion.html" %}{% else %}<div class="empty-state"><h2>No hay observaciones vigentes para este filtro</h2><p>Probá con otro período, cliente u operación.</p><a class="button" href="{% url 'historial' %}">Ver historial</a></div>{% endif %}
+</section>
 {% endblock %}

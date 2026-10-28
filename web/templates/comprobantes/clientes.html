@@ -1,9 +1,11 @@
 {% extends "comprobantes/base.html" %}
+{% block titulo_pagina %}Clientes · Automatizador{% endblock %}
 {% block contenido %}
-<h1>Clientes</h1>
-{% if user.is_staff and not DEMO_MODE %}<p><a href="{% url 'cliente_nuevo' %}">Agregar cliente</a></p>{% endif %}
-<table><thead><tr><th>Nombre</th><th>CUIT</th></tr></thead><tbody>
-{% for cliente in clientes %}<tr><td>{{ cliente.nombre }}</td><td>{{ cliente.cuit }}</td></tr>
-{% empty %}<tr><td colspan="2">Todavía no hay clientes. {% if user.is_staff and not DEMO_MODE %}<a href="{% url 'cliente_nuevo' %}">Agregá el primero</a>.{% endif %}</td></tr>{% endfor %}
-</tbody></table>
+<div class="page-heading"><div><p class="eyebrow">Directorio</p><h1>Clientes</h1><p class="lede">Consultá los clientes incluidos en las importaciones.</p></div>
+{% if user.is_staff and not DEMO_MODE %}<div class="page-heading__actions"><a class="button button--primary" href="{% url 'cliente_nuevo' %}">Agregar cliente</a></div>{% endif %}</div>
+{% if clientes %}
+<div class="table-scroll"><table class="data-table"><thead><tr><th scope="col">Nombre</th><th scope="col">CUIT</th></tr></thead><tbody>
+{% for cliente in clientes %}<tr><td>{{ cliente.nombre }}</td><td class="nowrap">{{ cliente.cuit|default:"—" }}</td></tr>{% endfor %}
+</tbody></table></div>
+{% else %}<section class="empty-state"><h2>Todavía no hay clientes</h2><p>Los clientes aparecerán aquí cuando se registren.</p>{% if user.is_staff and not DEMO_MODE %}<a class="button button--primary" href="{% url 'cliente_nuevo' %}">Agregar el primero</a>{% else %}<a class="button" href="{% url 'historial' %}">Ver historial</a>{% endif %}</section>{% endif %}
 {% endblock %}

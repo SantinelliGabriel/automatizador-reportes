@@ -1,8 +1,10 @@
 {% extends "comprobantes/base.html" %}
+{% block titulo_pagina %}Ingresar · Automatizador{% endblock %}
 {% block contenido %}
-<h1>Ingresar</h1>
-<form method="post">{% csrf_token %}
-{{ form.as_p }}
-<button type="submit">Entrar</button>
-</form>
+<div class="page-heading"><div><p class="eyebrow">Acceso local</p><h1>Ingresar</h1><p class="lede">Consultá las importaciones y los informes de comprobantes.</p></div></div>
+<section class="panel panel--form"><form method="post">{% csrf_token %}
+  {% if form.non_field_errors %}<div class="alert alert--error" role="alert">{{ form.non_field_errors }}</div>{% endif %}
+  {% for campo in form %}<div class="field"><label for="{{ campo.id_for_label }}">{{ campo.label }}</label>{{ campo }}{% for error in campo.errors %}<small class="field__error" role="alert">{{ error }}</small>{% endfor %}</div>{% endfor %}
+  <button class="button button--primary" type="submit">Entrar</button>
+</form></section>
 {% endblock %}

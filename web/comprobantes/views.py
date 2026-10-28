@@ -13,7 +13,7 @@ from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.core import signing
 from django.db import IntegrityError, transaction
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import never_cache
@@ -25,7 +25,7 @@ from automatizador.lotes import operaciones_aceptadas
 from automatizador.procesamiento import confirmar_importacion, previsualizar
 from automatizador.procesamiento import generar_informe
 from web.comprobantes.forms import CargaForm, ClienteForm
-from web.comprobantes.models import Cliente
+from web.comprobantes.models import Cliente, Importacion
 from web.comprobantes.previews import (
     DURACION_SEGUNDOS, firmar, guardar_temporal, hash_opciones, hash_plan, limpiar_vencidas,
     ruta_temporal, verificar, version_operacion,
@@ -42,10 +42,26 @@ def solo_operador(vista):
     @wraps(vista)
     def protegida(request, *args, **kwargs):
         if settings.DEMO_MODE or not request.user.is_staff:
-            return HttpResponseForbidden("Acceso de solo lectura.")
+            return acceso_denegado(request)
         return vista(request, *args, **kwargs)
 
     return protegida
+
+
+def acceso_denegado(request, exception=None):
+    return render(request, "comprobantes/403.html", status=403)
+
+
+def csrf_fallido(request, reason=""):
+    return acceso_denegado(request)
+
+
+def pagina_no_encontrada(request, exception=None):
+    return render(request, "comprobantes/404.html", status=404)
+
+
+def error_servidor(request):
+    return render(request, "comprobantes/500.html", status=500)
 
 
 @never_cache
@@ -54,6 +70,13 @@ def historial(request):
     filas = RepositorioDjango().consultar_importaciones().to_dict("records")
     pagina = Paginator(filas, 50).get_page(request.GET.get("page"))
     return render(request, "comprobantes/historial.html", {"importaciones": pagina, "page_obj": pagina})
+
+
+@never_cache
+@login_required
+def informes(request):
+    periodos = Importacion.objects.order_by("-periodo").values_list("periodo", flat=True).distinct()
+    return render(request, "comprobantes/informes.html", {"periodos": periodos})
 
 
 @never_cache
@@ -121,6 +144,16 @@ def _hash_mapeo(ruta):
 def _operaciones_del_plan(plan):
     return tuple(sorted({operacion for archivo in plan.archivos if archivo.aplicar
                          for operacion in operaciones_aceptadas({"comprobantes": archivo.comprobantes})}))
+
+
+def _filas_tabla(tabla):
+    """Añade metadatos de presentación sin modificar los valores validados."""
+    importes = {"neto_gravado", "iva", "no_gravado_exento", "percepciones", "total"}
+    columnas = list(tabla.columns)
+    return [[{"valor": fila.get(columna),
+              "importe": columna in importes or columna.endswith("_origen"),
+              "nowrap": columna in {"cuit", "numero", "punto_venta"}}
+             for columna in columnas] for fila in tabla.head(50).to_dict("records")]
 
 
 def _leer_plan(meta):
@@ -246,8 +279,8 @@ def vista_previa(request):
                            if "operacion" in archivo.comprobantes else {})
     return render(request, "comprobantes/vista_previa.html", {
         "cliente": cliente, "periodo": plan.periodo, "archivo": archivo,
-        "validas": archivo.comprobantes.head(50).to_dict("records"),
-        "observadas": archivo.observaciones.head(50).to_dict("records"),
+        "validas": _filas_tabla(archivo.comprobantes),
+        "observadas": _filas_tabla(archivo.observaciones),
         "columnas_validas": archivo.comprobantes.columns,
         "columnas_observadas": archivo.observaciones.columns,
         "cantidad_validas": len(archivo.comprobantes), "cantidad_observadas": len(archivo.observaciones),

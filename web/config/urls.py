@@ -3,7 +3,7 @@
 from django.contrib import admin
 from django.conf import settings
 from django.contrib.auth import views as auth_views
-from django.urls import path
+from django.urls import path, re_path
 
 from web.comprobantes import views
 
@@ -18,8 +18,14 @@ urlpatterns = [
     path("confirmar/", views.confirmar, name="confirmar"),
     path("historial/", views.historial, name="historial"),
     path("observaciones/", views.observaciones, name="observaciones"),
+    path("informes/", views.informes, name="informes"),
     path("informes/<str:periodo>/", views.descargar_informe, name="descargar_informe"),
 ]
 
 if not settings.DEMO_MODE:
     urlpatterns.append(path("admin/", admin.site.urls))
+
+urlpatterns.append(re_path(r"^.*$", views.pagina_no_encontrada))
+handler403 = views.acceso_denegado
+handler404 = views.pagina_no_encontrada
+handler500 = views.error_servidor
