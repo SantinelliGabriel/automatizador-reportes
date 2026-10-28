@@ -156,6 +156,8 @@ python web/manage.py runserver
 
 Entrá en `/login/` con el usuario `demo` y la contraseña elegida. `reconstruir_demo` es idempotente: vuelve a cargar los archivos sintéticos de `ejemplos/`. La demo permite consultar clientes, historial, observaciones e informes; impide altas y cargas, y deshabilita el admin.
 
+`DJANGO_DEMO_MODE=1` activa el modo demo. Si queda encendido en una instalación de uso real, el alta de clientes, la carga y la confirmación responden 403 y el admin queda deshabilitado; las consultas y descargas siguen disponibles tras iniciar sesión. `reconstruir_demo` solo admite una base dedicada llamada `demo.sqlite3` y se niega a modificar datos ajenos a los ejemplos.
+
 ## Migración de la base
 
 Al abrir una base SQLite anterior, el programa migra su esquema y crea un respaldo `.v0.bak.db`, `.v1.bak.db` o `.v2.bak.db`, según la versión de origen, antes de hacerlo. La CLI y la interfaz local muestran la ruta del respaldo; conservá esa copia hasta revisar los informes generados. La migración a v3 registra en el historial las operaciones que todavía pueden identificarse por sus comprobantes; las importaciones antiguas sin comprobantes asociados quedan con la operación vacía.
