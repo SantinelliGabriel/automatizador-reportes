@@ -4,6 +4,9 @@ Los cambios relevantes de cada versión se registran en este archivo.
 
 ## [Unreleased]
 
+- La web Django incorpora historial, observaciones vigentes y descarga de informes consolidados por período.
+- El modo demo local reconstruye una base con ejemplos sintéticos y ofrece acceso de solo lectura.
+
 - La interfaz local de Django permite login, alta de clientes, vista previa y confirmación de importaciones; los archivos de vista previa vencen a los 30 minutos.
 - Las cargas web limitan tamaño y estructura de archivos, y los Excel se leen en modo de solo lectura.
 - Los textos que comienzan con `=`, `+`, `-` o `@` se escriben como texto literal en las hojas Excel de todos los informes.

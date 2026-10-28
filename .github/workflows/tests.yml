@@ -54,6 +54,14 @@ jobs:
           DJANGO_SECRET_KEY: ci-deploy-synthetic-key-5b62e2e44c7848b0abfa0097815629a9
         run: python web/manage.py check --deploy
 
+      - name: Check Django demo settings
+        env:
+          DJANGO_DEBUG: '0'
+          DJANGO_DEMO_MODE: '1'
+          DJANGO_ALLOWED_HOSTS: example.test
+          DJANGO_SECRET_KEY: ci-demo-synthetic-key-3ad3b595932d46a1a0f4f44f58b6c081
+        run: python web/manage.py check --deploy
+
       - name: Check Django migrations
         run: python web/manage.py makemigrations --check --dry-run
 

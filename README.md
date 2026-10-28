@@ -125,6 +125,37 @@ Abrí `http://127.0.0.1:8000/login/` e ingresá con ese usuario. `DJANGO_DEBUG=1
 
 Para probar la carga web, creá un cliente y subí `ejemplos/Cliente Demo Norte.xlsx` con período `2026-09`, origen **Estándar** y operación **Mixto: según la columna del archivo**. El ejemplo contiene ventas y compras; la vista previa muestra cada operación antes de confirmar.
 
+La web también muestra el historial, las observaciones vigentes y permite descargar el informe consolidado del período para todos los clientes.
+
+### Modo demo local
+
+Usá una base separada y una contraseña elegida para la sesión. Después de instalar `.[web]`, en PowerShell:
+
+```powershell
+New-Item -ItemType Directory -Force resultados | Out-Null
+$env:DJANGO_DEBUG = "1"
+$env:DJANGO_DEMO_MODE = "1"
+$env:DJANGO_DB_PATH = "resultados/demo.sqlite3"
+$env:DJANGO_DEMO_PASSWORD = Read-Host "Contraseña de demo"
+python web/manage.py migrate
+python web/manage.py reconstruir_demo
+python web/manage.py runserver
+```
+
+En macOS o Linux:
+
+```bash
+mkdir -p resultados
+export DJANGO_DEBUG=1 DJANGO_DEMO_MODE=1 DJANGO_DB_PATH=resultados/demo.sqlite3
+read -r -s -p "Contraseña de demo: " DJANGO_DEMO_PASSWORD; echo
+export DJANGO_DEMO_PASSWORD
+python web/manage.py migrate
+python web/manage.py reconstruir_demo
+python web/manage.py runserver
+```
+
+Entrá en `/login/` con el usuario `demo` y la contraseña elegida. `reconstruir_demo` es idempotente: vuelve a cargar los archivos sintéticos de `ejemplos/`. La demo permite consultar clientes, historial, observaciones e informes; impide altas y cargas, y deshabilita el admin.
+
 ## Migración de la base
 
 Al abrir una base SQLite anterior, el programa migra su esquema y crea un respaldo `.v0.bak.db`, `.v1.bak.db` o `.v2.bak.db`, según la versión de origen, antes de hacerlo. La CLI y la interfaz local muestran la ruta del respaldo; conservá esa copia hasta revisar los informes generados. La migración a v3 registra en el historial las operaciones que todavía pueden identificarse por sus comprobantes; las importaciones antiguas sin comprobantes asociados quedan con la operación vacía.
