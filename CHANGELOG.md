@@ -2,7 +2,14 @@
 
 Los cambios relevantes de cada versión se registran en este archivo.
 
-## [Unreleased]
+## [0.2.0] - 2026-10-28
+
+- La interfaz web local incorpora navegación, diseño adaptable, modo oscuro automático y páginas de error propias.
+- La migración SQLite v3 respalda la base y registra las operaciones; el reemplazo se limita a las operaciones aceptadas de cada cliente y período.
+- Las observaciones vigentes consideran los intentos posteriores no aplicados y el historial muestra su estado derivado.
+- Una clave normalizada identifica clientes en ambos repositorios, mientras se conserva el nombre original para mostrarlo.
+- El repositorio Django permite carga segura con vista previa, historial, observaciones y descarga del informe consolidado por período.
+- El modo demo usa datos sintéticos y ofrece consultas de solo lectura.
 
 - La web Django incorpora historial, observaciones vigentes y descarga de informes consolidados por período.
 - El modo demo local reconstruye una base con ejemplos sintéticos y ofrece acceso de solo lectura.
