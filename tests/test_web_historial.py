@@ -68,6 +68,20 @@ class TestLecturasWeb(unittest.TestCase):
             self.assertIn(texto.casefold(), respuesta.content.decode().casefold())
         self.assertLess(respuesta.content.index(b"conflicto.csv"), respuesta.content.index(b"fallido.csv"))
 
+    def test_historial_pagina_cincuenta_y_muestra_la_siguiente(self):
+        cliente = Cliente.objects.create(nombre="Cliente Paginado Sintético")
+        for numero in range(1, 52):
+            Importacion.objects.create(cliente=cliente, periodo="2026-09", archivo_origen=f"archivo-{numero}.csv")
+        primera = self.navegador.get("/historial/").content.decode()
+        segunda = self.navegador.get("/historial/?page=2").content.decode()
+        self.assertEqual(primera.count("<tr>"), 51)
+        self.assertEqual(segunda.count("<tr>"), 2)
+        self.assertIn("archivo-51.csv", primera)
+        self.assertNotIn("archivo-1.csv", primera)
+        self.assertIn("archivo-1.csv", segunda)
+        self.assertIn("?page=2", primera)
+        self.assertIn("?page=1", segunda)
+
     def test_observaciones_vigentes_filtra_cliente_y_operacion(self):
         self.importar()
         cliente = Cliente.objects.get()
@@ -82,6 +96,23 @@ class TestLecturasWeb(unittest.TestCase):
         self.assertNotIn("Dato sintético inválido", self.navegador.get("/observaciones/?operacion=compras").content.decode())
         self.assertEqual(self.navegador.get("/observaciones/?periodo=2026-13").status_code, 400)
         self.assertEqual(self.navegador.get("/observaciones/?operacion=otra").status_code, 400)
+
+    def test_observaciones_paginadas_conservan_filtros(self):
+        cliente = Cliente.objects.create(nombre="Cliente Sintético")
+        intento = Importacion.objects.create(cliente=cliente, periodo="2026-09", archivo_origen="errores.csv",
+                                             rechazados=51, operaciones="ventas")
+        for numero in range(1, 52):
+            Observacion.objects.create(importacion=intento, fila_excel=str(numero),
+                                       motivo=f"Motivo sintético {numero}", datos={"operacion": "ventas"})
+        consulta = "/observaciones/?periodo=2026-09&cliente=Cliente+Sint%C3%A9tico&operacion=ventas"
+        primera = self.navegador.get(consulta).content.decode()
+        segunda = self.navegador.get(consulta + "&page=2").content.decode()
+        self.assertEqual(primera.count("<tr>"), 51)
+        self.assertEqual(segunda.count("<tr>"), 2)
+        self.assertIn("Motivo sintético 51", segunda)
+        self.assertNotIn("Motivo sintético 51", primera)
+        self.assertIn("periodo=2026-09&amp;cliente=Cliente+Sint%C3%A9tico&amp;operacion=ventas&amp;page=2", primera)
+        self.assertIn("periodo=2026-09&amp;cliente=Cliente+Sint%C3%A9tico&amp;operacion=ventas&amp;page=1", segunda)
 
     def test_excel_consolidado_igual_al_nucleo_y_temporal_limpio(self):
         self.importar()

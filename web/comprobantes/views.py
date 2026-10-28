@@ -4,6 +4,7 @@ import hashlib
 import re
 import tempfile
 import time
+from urllib.parse import urlencode
 from functools import wraps
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from django.conf import settings
 from django.core import signing
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
@@ -50,7 +52,8 @@ def solo_operador(vista):
 @login_required
 def historial(request):
     filas = RepositorioDjango().consultar_importaciones().to_dict("records")
-    return render(request, "comprobantes/historial.html", {"importaciones": filas})
+    pagina = Paginator(filas, 50).get_page(request.GET.get("page"))
+    return render(request, "comprobantes/historial.html", {"importaciones": pagina, "page_obj": pagina})
 
 
 @never_cache
@@ -68,8 +71,12 @@ def observaciones(request):
         tabla = tabla[tabla["cliente"] == cliente]
     if operacion:
         tabla = tabla[tabla["operacion"] == operacion] if "operacion" in tabla else tabla.iloc[0:0]
+    pagina = Paginator(tabla.to_dict("records"), 50).get_page(request.GET.get("page"))
     return render(request, "comprobantes/observaciones.html", {
-        "observaciones": tabla.to_dict("records"), "periodo": periodo, "cliente": cliente,
+        "observaciones": pagina, "page_obj": pagina,
+        "filtros_query": urlencode({k: v for k, v in (("periodo", periodo), ("cliente", cliente),
+                                                  ("operacion", operacion)) if v}),
+        "periodo": periodo, "cliente": cliente,
         "operacion": operacion, "clientes": Cliente.objects.order_by("nombre"),
     })
 

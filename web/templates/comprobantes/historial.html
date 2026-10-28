@@ -5,6 +5,7 @@
 <table><thead><tr><th>Cliente</th><th>Período</th><th>Archivo</th><th>Fecha</th><th>Operaciones</th><th>Aceptados</th><th>Rechazados</th><th>Estado</th></tr></thead><tbody>
 {% for fila in importaciones %}<tr><td>{{ fila.cliente }}</td><td><a href="{% url 'descargar_informe' fila.periodo %}" aria-label="Informe consolidado del período: todos los clientes, {{ fila.periodo }}">{{ fila.periodo }}</a></td><td>{{ fila.archivo_origen }}</td><td>{{ fila.fecha_importacion }}</td><td>{{ fila.operaciones|default:"Sin identificar" }}</td><td>{{ fila.aceptados }}</td><td>{{ fila.rechazados }}</td><td>{{ fila.estado }}</td></tr>{% endfor %}
 </tbody></table>
+{% include "comprobantes/_paginacion.html" %}
 <p>Informe consolidado del período: todos los clientes. Elegí un período para descargarlo.</p>
 <p><a href="{% url 'observaciones' %}">Ver observaciones vigentes</a></p>
 {% else %}<p>Todavía no hay importaciones. {% if user.is_staff and not DEMO_MODE %}<a href="{% url 'cargar' %}">Subí un archivo</a>.{% else %}Consultá más tarde.{% endif %}</p>{% endif %}
