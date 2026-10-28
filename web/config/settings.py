@@ -9,6 +9,7 @@ from django.core.exceptions import ImproperlyConfigured
 
 BASE_DIR = Path(__file__).resolve().parents[1]
 DEBUG = os.getenv("DJANGO_DEBUG", "0").lower() in {"1", "true", "yes"}
+DEMO_MODE = os.getenv("DJANGO_DEMO_MODE", "0").lower() in {"1", "true", "yes"}
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
     if DEBUG:
@@ -42,6 +43,7 @@ TEMPLATES = [{
         "django.template.context_processors.request",
         "django.contrib.auth.context_processors.auth",
         "django.contrib.messages.context_processors.messages",
+        "web.comprobantes.contexto.modo_demo",
     ]},
 }]
 WSGI_APPLICATION = "web.config.wsgi.application"

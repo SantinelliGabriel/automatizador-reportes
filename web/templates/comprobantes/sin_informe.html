@@ -1,0 +1,5 @@
+{% extends "comprobantes/base.html" %}
+{% block contenido %}
+<h1>Informe consolidado del período: todos los clientes</h1>
+<p>Período {{ periodo }}: todavía no hay comprobantes. <a href="{% url 'historial' %}">Ver historial</a>.</p>
+{% endblock %}
