@@ -6,7 +6,7 @@ Herramienta para revisar comprobantes de ventas y compras, registrar observacion
 
 <sub><strong>English summary:</strong> A Python tool for validating invoices and credit/debit notes, importing ARCA exports, and producing Argentine VAT (IVA) reports.<br>It combines source adapters, SQLite history, bank reconciliation, and a synthetic Streamlit demo.</sub>
 
-**Estado:** proyecto personal de portfolio · **Versión:** [0.1.1](CHANGELOG.md)
+**Estado:** proyecto personal de portfolio · **Versión:** [0.2.0](CHANGELOG.md)
 
 ![Recorrido de la demo sintética y el informe Excel generado](docs/images/flujo-demo.gif)
 
@@ -14,7 +14,7 @@ Herramienta para revisar comprobantes de ventas y compras, registrar observacion
 
 ## Índice
 
-[Problema](#problema) · [Funcionalidades](#funcionalidades) · [Demo](#demo) · [Uso](#instalación-y-uso) · [Web](#interfaz-web-en-desarrollo) · [Flujo](#flujo) · [Diseño](#decisiones-de-diseño) · [Limitaciones](#limitaciones-y-próximos-pasos) · [Desarrollo](#desarrollo)
+[Problema](#problema) · [Funcionalidades](#funcionalidades) · [Demo](#demo) · [Uso](#instalación-y-uso) · [Web](#interfaz-web) · [Flujo](#flujo) · [Diseño](#decisiones-de-diseño) · [Limitaciones](#limitaciones-y-próximos-pasos) · [Desarrollo](#desarrollo)
 
 ## Problema
 
@@ -91,9 +91,17 @@ automatizador \
 
 Más detalles de [adaptadores ARCA/Holistor](docs/adaptadores.md).
 
-## Interfaz web (Django)
+## Interfaz web
 
-La interfaz local permite iniciar sesión, dar de alta clientes, subir comprobantes y revisar filas válidas y observadas antes de confirmar la importación. Usa el repositorio Django; la CLI y Streamlit funcionan sin esa dependencia. Desde la raíz del repositorio, creá y activá el entorno virtual como se indica en «Instalación y uso» e instalá la dependencia web:
+La interfaz Django permite iniciar sesión, dar de alta clientes, subir comprobantes y revisar filas válidas y observadas antes de confirmar la importación. Muestra el historial y las observaciones vigentes, y descarga un informe consolidado por período. Se ejecuta en local; este repositorio no ofrece un servicio web público de Django. La CLI y Streamlit funcionan sin la dependencia web.
+
+| Clientes | Historial |
+| --- | --- |
+| ![Clientes ficticios en la web](docs/images/web-clientes.png) | ![Historial de importaciones sintéticas](docs/images/web-historial.png) |
+| Observaciones en móvil | Informe consolidado |
+| ![Observaciones vigentes en móvil](docs/images/web-observaciones-movil.png) | ![Página de descarga del informe](docs/images/web-informe.png) |
+
+Desde la raíz del repositorio, creá y activá el entorno virtual como se indica en «Instalación y uso» e instalá la dependencia web:
 
 ```bash
 python -m pip install -e ".[web]"
@@ -203,7 +211,7 @@ GitHub Actions ejecuta los controles en Linux y Windows.
 
 ```text
 automatizador/                  Paquete: lógica, CLI, adaptadores e interfaz
-web/                            Proyecto Django opcional: modelos, repositorio e interfaz
+web/                            Proyecto Django opcional: modelos, repositorio, plantillas y CSS
 tests/                          Pruebas por módulo
 tests/fixtures/arca/            CSV sintético de Mis Comprobantes
 ejemplos/                       Entradas, salida y calendario sintéticos
