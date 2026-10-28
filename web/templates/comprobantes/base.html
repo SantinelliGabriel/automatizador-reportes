@@ -6,10 +6,12 @@
 <header><strong>Automatizador de comprobantes</strong>
 {% if user.is_authenticated %}
 <nav><a href="{% url 'clientes' %}">Clientes</a>
-{% if user.is_staff %}<a href="{% url 'cargar' %}">Subir archivo</a>{% endif %}
+<a href="{% url 'historial' %}">Historial</a> <a href="{% url 'observaciones' %}">Observaciones</a>
+{% if user.is_staff and not DEMO_MODE %}<a href="{% url 'cargar' %}">Subir archivo</a>{% endif %}
 <form action="{% url 'logout' %}" method="post">{% csrf_token %}<button type="submit">Salir</button></form>
 </nav>{% endif %}</header>
 <main>
+{% if DEMO_MODE %}<p role="status"><strong>Modo demo: datos ficticios, solo lectura</strong></p>{% endif %}
 {% for mensaje in messages %}<p role="status">{{ mensaje }}</p>{% endfor %}
 {% block contenido %}{% endblock %}
 </main>

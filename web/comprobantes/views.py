@@ -1,7 +1,10 @@
 """Pantallas locales de clientes y confirmación de importaciones."""
 
 import hashlib
+import re
+import tempfile
 import time
+from urllib.parse import urlencode
 from functools import wraps
 from pathlib import Path
 
@@ -11,6 +14,7 @@ from django.conf import settings
 from django.core import signing
 from django.db import IntegrityError, transaction
 from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
+from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import never_cache
 from django.views.decorators.http import require_POST
@@ -19,6 +23,7 @@ from automatizador.adaptadores import leer_comprobantes
 from automatizador.clientes import clave_cliente
 from automatizador.lotes import operaciones_aceptadas
 from automatizador.procesamiento import confirmar_importacion, previsualizar
+from automatizador.procesamiento import generar_informe
 from web.comprobantes.forms import CargaForm, ClienteForm
 from web.comprobantes.models import Cliente
 from web.comprobantes.previews import (
@@ -36,11 +41,64 @@ def solo_operador(vista):
     @login_required
     @wraps(vista)
     def protegida(request, *args, **kwargs):
-        if not request.user.is_staff:
+        if settings.DEMO_MODE or not request.user.is_staff:
             return HttpResponseForbidden("Acceso de solo lectura.")
         return vista(request, *args, **kwargs)
 
     return protegida
+
+
+@never_cache
+@login_required
+def historial(request):
+    filas = RepositorioDjango().consultar_importaciones().to_dict("records")
+    pagina = Paginator(filas, 50).get_page(request.GET.get("page"))
+    return render(request, "comprobantes/historial.html", {"importaciones": pagina, "page_obj": pagina})
+
+
+@never_cache
+@login_required
+def observaciones(request):
+    periodo = request.GET.get("periodo", "")
+    cliente = request.GET.get("cliente", "")
+    operacion = request.GET.get("operacion", "")
+    if periodo and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", periodo):
+        return HttpResponseBadRequest("Período inválido. Usá AAAA-MM.")
+    if operacion not in {"", "ventas", "compras"}:
+        return HttpResponseBadRequest("Operación inválida.")
+    tabla = RepositorioDjango().consultar_observaciones(periodo or None)
+    if cliente:
+        tabla = tabla[tabla["cliente"] == cliente]
+    if operacion:
+        tabla = tabla[tabla["operacion"] == operacion] if "operacion" in tabla else tabla.iloc[0:0]
+    pagina = Paginator(tabla.to_dict("records"), 50).get_page(request.GET.get("page"))
+    return render(request, "comprobantes/observaciones.html", {
+        "observaciones": pagina, "page_obj": pagina,
+        "filtros_query": urlencode({k: v for k, v in (("periodo", periodo), ("cliente", cliente),
+                                                  ("operacion", operacion)) if v}),
+        "periodo": periodo, "cliente": cliente,
+        "operacion": operacion, "clientes": Cliente.objects.order_by("nombre"),
+    })
+
+
+@never_cache
+@login_required
+def descargar_informe(request, periodo):
+    if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", periodo):
+        return HttpResponseBadRequest("Período inválido. Usá AAAA-MM.")
+    repositorio = RepositorioDjango()
+    if repositorio.consultar_comprobantes(periodo).empty:
+        return render(request, "comprobantes/sin_informe.html", {"periodo": periodo})
+    with tempfile.TemporaryDirectory(prefix="automatizador-informe-") as temporal:
+        salida = Path(temporal) / "informe.xlsx"
+        try:
+            generar_informe(periodo, salida, repositorio)
+            contenido = salida.read_bytes()
+        finally:
+            salida.unlink(missing_ok=True)
+    respuesta = HttpResponse(contenido, content_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    respuesta["Content-Disposition"] = f'attachment; filename="informe_consolidado_{periodo}.xlsx"'
+    return respuesta
 
 
 def _error_generico(plan):

@@ -1,6 +1,7 @@
 """Rutas de la interfaz local."""
 
 from django.contrib import admin
+from django.conf import settings
 from django.contrib.auth import views as auth_views
 from django.urls import path
 
@@ -15,5 +16,10 @@ urlpatterns = [
     path("cargar/", views.cargar, name="cargar"),
     path("vista-previa/", views.vista_previa, name="vista_previa"),
     path("confirmar/", views.confirmar, name="confirmar"),
-    path("admin/", admin.site.urls),
+    path("historial/", views.historial, name="historial"),
+    path("observaciones/", views.observaciones, name="observaciones"),
+    path("informes/<str:periodo>/", views.descargar_informe, name="descargar_informe"),
 ]
+
+if not settings.DEMO_MODE:
+    urlpatterns.append(path("admin/", admin.site.urls))
