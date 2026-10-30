@@ -1,12 +1,12 @@
 {% extends "comprobantes/base.html" %}
+{% block titulo_pagina %}Historial · Automatizador{% endblock %}
 {% block contenido %}
-<h1>Historial de importaciones</h1>
+<div class="page-heading"><div><p class="eyebrow">Seguimiento</p><h1>Historial de importaciones</h1><p class="lede">Cada intento conserva su resultado y las operaciones involucradas.</p></div></div>
 {% if importaciones %}
-<table><thead><tr><th>Cliente</th><th>Período</th><th>Archivo</th><th>Fecha</th><th>Operaciones</th><th>Aceptados</th><th>Rechazados</th><th>Estado</th></tr></thead><tbody>
-{% for fila in importaciones %}<tr><td>{{ fila.cliente }}</td><td><a href="{% url 'descargar_informe' fila.periodo %}" aria-label="Informe consolidado del período: todos los clientes, {{ fila.periodo }}">{{ fila.periodo }}</a></td><td>{{ fila.archivo_origen }}</td><td>{{ fila.fecha_importacion }}</td><td>{{ fila.operaciones|default:"Sin identificar" }}</td><td>{{ fila.aceptados }}</td><td>{{ fila.rechazados }}</td><td>{{ fila.estado }}</td></tr>{% endfor %}
-</tbody></table>
+<div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos"><table class="data-table"><thead><tr><th scope="col">Cliente</th><th scope="col">Período</th><th scope="col">Archivo</th><th scope="col">Fecha</th><th scope="col">Operaciones</th><th scope="col" class="numeric">Aceptados</th><th scope="col" class="numeric">Rechazados</th><th scope="col">Estado</th></tr></thead><tbody>
+{% for fila in importaciones %}<tr><td>{{ fila.cliente }}</td><td><a href="{% url 'descargar_informe' fila.periodo %}" aria-label="Informe consolidado del período: todos los clientes, {{ fila.periodo }}">{{ fila.periodo }}</a></td><td>{{ fila.archivo_origen }}</td><td>{{ fila.fecha_importacion }}</td><td>{{ fila.operaciones|default:"Sin identificar" }}</td><td class="numeric">{{ fila.aceptados }}</td><td class="numeric">{{ fila.rechazados }}</td><td>{% if fila.estado == "aplicada" %}<span class="badge badge--aplicada">{{ fila.estado }}</span>{% elif fila.estado == "no aplicada: conflicto" %}<span class="badge badge--conflicto">{{ fila.estado }}</span>{% else %}<span class="badge badge--sin-aceptadas">{{ fila.estado }}</span>{% endif %}</td></tr>{% endfor %}
+</tbody></table></div>
 {% include "comprobantes/_paginacion.html" %}
-<p>Informe consolidado del período: todos los clientes. Elegí un período para descargarlo.</p>
-<p><a href="{% url 'observaciones' %}">Ver observaciones vigentes</a></p>
-{% else %}<p>Todavía no hay importaciones. {% if user.is_staff and not DEMO_MODE %}<a href="{% url 'cargar' %}">Subí un archivo</a>.{% else %}Consultá más tarde.{% endif %}</p>{% endif %}
+<p class="lede">Informe consolidado del período: todos los clientes. Seleccionar un período para descargarlo. <a href="{% url 'observaciones' %}">Ver observaciones vigentes</a>.</p>
+{% else %}<section class="empty-state"><h2>Todavía no hay importaciones</h2><p>Las cargas confirmadas y los intentos observados aparecerán aquí.</p>{% if user.is_staff and not DEMO_MODE %}<a class="button button--primary" href="{% url 'cargar' %}">Subir un archivo</a>{% else %}<a class="button" href="{% url 'clientes' %}">Ver clientes</a>{% endif %}</section>{% endif %}
 {% endblock %}

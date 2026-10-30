@@ -1,5 +1,6 @@
 {% extends "comprobantes/base.html" %}
+{% block titulo_pagina %}Informe del período · Automatizador{% endblock %}
 {% block contenido %}
-<h1>Informe consolidado del período: todos los clientes</h1>
-<p>Período {{ periodo }}: todavía no hay comprobantes. <a href="{% url 'historial' %}">Ver historial</a>.</p>
+<div class="page-heading"><div><p class="eyebrow">Informes</p><h1>Informe consolidado del período: todos los clientes</h1></div></div>
+<section class="empty-state"><h2>Período {{ periodo }}: todavía no hay comprobantes</h2><p>Seleccionar un período con comprobantes para descargar el informe.</p><a class="button" href="{% url 'informes' %}">Ver períodos</a></section>
 {% endblock %}

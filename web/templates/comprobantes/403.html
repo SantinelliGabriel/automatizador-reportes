@@ -1,0 +1,5 @@
+{% extends "comprobantes/base.html" %}
+{% block titulo_pagina %}Acceso denegado · Automatizador{% endblock %}
+{% block contenido %}
+<section class="panel error-panel"><p class="error-panel__code">ERROR 403</p><h1>Acceso denegado</h1><p class="lede">Esta acción no está disponible para esta cuenta.</p><a class="button" href="{% url 'clientes' %}">Volver a clientes</a></section>
+{% endblock %}

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "automatizador-comprobantes-iva"
-version = "0.1.1"
+version = "0.2.0"
 description = "Herramienta en Python y pandas para validar comprobantes contables y generar informes de IVA en Excel."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -46,6 +46,7 @@ packages = ["automatizador", "ejemplos", "web", "web.config", "web.comprobantes"
 [tool.setuptools.package-data]
 ejemplos = ["*.xlsx", "*.csv"]
 web = ["templates/comprobantes/*.html"]
+"web.comprobantes" = ["static/comprobantes/*"]
 
 [tool.ruff]
 line-length = 120

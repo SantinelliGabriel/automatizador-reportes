@@ -1,26 +1,21 @@
 {% extends "comprobantes/base.html" %}
+{% block titulo_pagina %}Vista previa · Automatizador{% endblock %}
 {% block contenido %}
-<h1>Vista previa</h1>
-<p>Cliente: {{ cliente.nombre }} · Período: {{ periodo }} · Archivo: {{ archivo.nombre }}</p>
-<p>{{ cantidad_validas }} filas válidas; {{ cantidad_observadas }} observadas.</p>
-<h2>Comprobantes válidos por operación</h2>
-<ul>{% for operacion, cantidad in cantidades_operacion %}<li>{{ operacion }}: {{ cantidad }}</li>
-{% empty %}<li>No hay comprobantes válidos.</li>{% endfor %}</ul>
-<p>Operaciones que se reemplazarán: {% for operacion in operaciones_reemplazo %}{{ operacion }}{% if not forloop.last %}, {% endif %}{% empty %}ninguna{% endfor %}.</p>
-<h2>Válidas</h2><p>Se muestran las primeras 50 filas.</p>
-<div style="overflow-x:auto"><table><thead><tr>
-{% for columna in columnas_validas %}<th>{{ columna }}</th>{% endfor %}
-</tr></thead><tbody>{% for fila in validas %}<tr>
-{% for valor in fila.values %}<td>{{ valor }}</td>{% endfor %}
-</tr>{% empty %}<tr><td>No hay filas válidas.</td></tr>{% endfor %}</tbody></table></div>
-<h2>Observadas</h2><p>Se muestran las primeras 50 filas.</p>
-<div style="overflow-x:auto"><table><thead><tr>
-{% for columna in columnas_observadas %}<th>{{ columna }}</th>{% endfor %}
-</tr></thead><tbody>{% for fila in observadas %}<tr>
-{% for valor in fila.values %}<td>{{ valor }}</td>{% endfor %}
-</tr>{% empty %}<tr><td>No hay filas observadas.</td></tr>{% endfor %}</tbody></table></div>
-<form method="post" action="{% url 'confirmar' %}">{% csrf_token %}
-<input type="hidden" name="token" value="{{ token }}">
-<button type="submit">Confirmar importación</button>
-</form>
+<div class="page-heading"><div><p class="eyebrow">Revisión antes de confirmar</p><h1>Vista previa</h1><p class="lede">Cliente: {{ cliente.nombre }} · Período: {{ periodo }} · Archivo: {{ archivo.nombre }}</p></div></div>
+<div class="summary-grid" aria-label="Resumen de la importación">
+  <div class="summary-card"><span class="summary-card__label">Comprobantes válidos</span><strong class="summary-card__value">{{ cantidad_validas }}</strong><span class="summary-card__detail">Listos para confirmar</span></div>
+  <div class="summary-card"><span class="summary-card__label">Filas observadas</span><strong class="summary-card__value">{{ cantidad_observadas }}</strong><span class="summary-card__detail">Revisar los motivos debajo</span></div>
+  <div class="summary-card"><span class="summary-card__label">Operaciones a reemplazar</span><strong class="summary-card__value">{{ operaciones_reemplazo|length }}</strong><span class="summary-card__detail">{% for operacion in operaciones_reemplazo %}{{ operacion }}{% if not forloop.last %}, {% endif %}{% empty %}Ninguna{% endfor %}</span></div>
+</div>
+<section class="panel"><h2>Comprobantes válidos por operación</h2><ul>{% for operacion, cantidad in cantidades_operacion %}<li>{{ operacion }}: {{ cantidad }}</li>{% empty %}<li>No hay comprobantes válidos.</li>{% endfor %}</ul>
+<p>Operaciones que se reemplazarán: {% for operacion in operaciones_reemplazo %}{{ operacion }}{% if not forloop.last %}, {% endif %}{% empty %}ninguna{% endfor %}.</p></section>
+<section class="section-block"><div class="section-heading"><h2>Válidas</h2><p>Se muestran las primeras 50 filas.</p></div>
+{% if validas %}<div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos"><table class="data-table"><thead><tr>{% for columna in columnas_validas %}<th scope="col">{{ columna }}</th>{% endfor %}</tr></thead><tbody>
+{% for fila in validas %}<tr>{% for celda in fila %}<td class="{% if celda.importe %}numeric {% endif %}{% if celda.nowrap %}nowrap{% endif %}">{{ celda.valor }}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>{% else %}<div class="empty-state"><h2>No hay filas válidas</h2><p>Revisar las observaciones antes de confirmar.</p></div>{% endif %}</section>
+<section class="section-block"><div class="section-heading"><h2>Observadas</h2><p>Se muestran las primeras 50 filas.</p></div>
+{% if observadas %}<div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos"><table class="data-table"><thead><tr>{% for columna in columnas_observadas %}<th scope="col">{{ columna }}</th>{% endfor %}</tr></thead><tbody>
+{% for fila in observadas %}<tr>{% for celda in fila %}<td class="{% if celda.importe %}numeric {% endif %}{% if celda.nowrap %}nowrap{% endif %}">{{ celda.valor }}</td>{% endfor %}</tr>{% endfor %}
+</tbody></table></div>{% else %}<div class="empty-state"><h2>No hay filas observadas</h2><p>El archivo no presenta observaciones en esta vista previa.</p></div>{% endif %}</section>
+<form class="form-actions" method="post" action="{% url 'confirmar' %}">{% csrf_token %}<input type="hidden" name="token" value="{{ token }}"><button class="button button--primary" type="submit">Confirmar importación</button><a class="text-link" href="{% url 'cargar' %}">Volver a cargar</a></form>
 {% endblock %}

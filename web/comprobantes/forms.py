@@ -11,6 +11,8 @@ class ClienteForm(forms.ModelForm):
     class Meta:
         model = Cliente
         fields = ["nombre", "cuit"]
+        help_texts = {"nombre": "Nombre que se mostrará en los informes.",
+                      "cuit": "Opcional. Usar solo datos sintéticos para probar la herramienta."}
 
     def clean_nombre(self):
         nombre = self.cleaned_data["nombre"].strip()
@@ -25,10 +27,11 @@ class CargaForm(forms.Form):
     periodo = forms.RegexField(regex=r"^\d{4}-(0[1-9]|1[0-2])$", max_length=7,
                                help_text="Formato AAAA-MM")
     origen = forms.ChoiceField(choices=[("estandar", "Estándar"), ("arca", "ARCA"),
-                                         ("holistor", "Holistor")])
+                                         ("holistor", "Holistor")], help_text="Seleccionar el formato del archivo.")
     operacion = forms.ChoiceField(choices=[("ventas", "Ventas"), ("compras", "Compras"),
-                                           ("mixto", "Mixto: según la columna del archivo (solo estándar)")])
-    archivo = forms.FileField()
+                                           ("mixto", "Mixto: según la columna del archivo (solo estándar)")],
+                                  help_text="Para archivos estándar con ventas y compras, seleccionar Mixto.")
+    archivo = forms.FileField(help_text="Archivo de hasta 10 MiB. La vista previa vence a los 30 minutos.")
 
     def clean(self):
         datos = super().clean()

@@ -22,7 +22,7 @@ class Command(BaseCommand):
             raise CommandError("Activá DJANGO_DEMO_MODE=1 para reconstruir la demo.")
         base = str(settings.DATABASES["default"]["NAME"])
         if base != ":memory:" and Path(base).name.casefold() != "demo.sqlite3":
-            raise CommandError("Usá una base dedicada llamada demo.sqlite3 para la demo.")
+            raise CommandError("Usar una base dedicada llamada demo.sqlite3 para la demo.")
         password = os.getenv("DJANGO_DEMO_PASSWORD", "")
         if not password:
             raise CommandError("DJANGO_DEMO_PASSWORD es obligatoria.")

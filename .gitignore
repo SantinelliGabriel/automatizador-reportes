@@ -20,6 +20,7 @@ comprobantes.db
 *.db
 db.sqlite3
 media/
+staticfiles/
 datos/
 resultados/
 

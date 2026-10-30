@@ -13,7 +13,8 @@ from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.core import signing
 from django.db import IntegrityError, transaction
-from django.http import HttpResponse, HttpResponseBadRequest, HttpResponseForbidden
+from django.db.models import Count, Max
+from django.http import HttpResponse, HttpResponseBadRequest
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
 from django.views.decorators.cache import never_cache
@@ -25,7 +26,7 @@ from automatizador.lotes import operaciones_aceptadas
 from automatizador.procesamiento import confirmar_importacion, previsualizar
 from automatizador.procesamiento import generar_informe
 from web.comprobantes.forms import CargaForm, ClienteForm
-from web.comprobantes.models import Cliente
+from web.comprobantes.models import Cliente, Importacion
 from web.comprobantes.previews import (
     DURACION_SEGUNDOS, firmar, guardar_temporal, hash_opciones, hash_plan, limpiar_vencidas,
     ruta_temporal, verificar, version_operacion,
@@ -42,18 +43,45 @@ def solo_operador(vista):
     @wraps(vista)
     def protegida(request, *args, **kwargs):
         if settings.DEMO_MODE or not request.user.is_staff:
-            return HttpResponseForbidden("Acceso de solo lectura.")
+            return acceso_denegado(request)
         return vista(request, *args, **kwargs)
 
     return protegida
+
+
+def acceso_denegado(request, exception=None):
+    return render(request, "comprobantes/403.html", status=403)
+
+
+def csrf_fallido(request, reason=""):
+    return acceso_denegado(request)
+
+
+def pagina_no_encontrada(request, exception=None):
+    return render(request, "comprobantes/404.html", status=404)
+
+
+def error_servidor(request):
+    return render(request, "comprobantes/500.html", status=500)
 
 
 @never_cache
 @login_required
 def historial(request):
     filas = RepositorioDjango().consultar_importaciones().to_dict("records")
+    cliente = request.GET.get("cliente", "")
+    if cliente:
+        filas = [fila for fila in filas if fila["cliente"] == cliente]
     pagina = Paginator(filas, 50).get_page(request.GET.get("page"))
-    return render(request, "comprobantes/historial.html", {"importaciones": pagina, "page_obj": pagina})
+    return render(request, "comprobantes/historial.html", {"importaciones": pagina, "page_obj": pagina,
+                  "filtros_query": urlencode({"cliente": cliente}) if cliente else ""})
+
+
+@never_cache
+@login_required
+def informes(request):
+    periodos = Importacion.objects.order_by("-periodo").values_list("periodo", flat=True).distinct()
+    return render(request, "comprobantes/informes.html", {"periodos": periodos})
 
 
 @never_cache
@@ -63,7 +91,7 @@ def observaciones(request):
     cliente = request.GET.get("cliente", "")
     operacion = request.GET.get("operacion", "")
     if periodo and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", periodo):
-        return HttpResponseBadRequest("Período inválido. Usá AAAA-MM.")
+        return HttpResponseBadRequest("Período inválido. Usar AAAA-MM.")
     if operacion not in {"", "ventas", "compras"}:
         return HttpResponseBadRequest("Operación inválida.")
     tabla = RepositorioDjango().consultar_observaciones(periodo or None)
@@ -85,7 +113,7 @@ def observaciones(request):
 @login_required
 def descargar_informe(request, periodo):
     if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", periodo):
-        return HttpResponseBadRequest("Período inválido. Usá AAAA-MM.")
+        return HttpResponseBadRequest("Período inválido. Usar AAAA-MM.")
     repositorio = RepositorioDjango()
     if repositorio.consultar_comprobantes(periodo).empty:
         return render(request, "comprobantes/sin_informe.html", {"periodo": periodo})
@@ -106,7 +134,7 @@ def _error_generico(plan):
         if "motivo" in archivo.observaciones:
             motivos = archivo.observaciones["motivo"].astype(str)
             mascara = motivos.str.startswith("No se pudo procesar el archivo:")
-            archivo.observaciones.loc[mascara, "motivo"] = "No se pudo interpretar el archivo. Revisá el formato."
+            archivo.observaciones.loc[mascara, "motivo"] = "No se pudo interpretar el archivo. Revisar el formato."
 
 
 def _mapeo(origen):
@@ -121,6 +149,16 @@ def _hash_mapeo(ruta):
 def _operaciones_del_plan(plan):
     return tuple(sorted({operacion for archivo in plan.archivos if archivo.aplicar
                          for operacion in operaciones_aceptadas({"comprobantes": archivo.comprobantes})}))
+
+
+def _filas_tabla(tabla):
+    """Añade metadatos de presentación sin modificar los valores validados."""
+    importes = {"neto_gravado", "iva", "no_gravado_exento", "percepciones", "total"}
+    columnas = list(tabla.columns)
+    return [[{"valor": fila.get(columna),
+              "importe": columna in importes or columna.endswith("_origen"),
+              "nowrap": columna in {"cuit", "numero", "punto_venta"}}
+             for columna in columnas] for fila in tabla.head(50).to_dict("records")]
 
 
 def _leer_plan(meta):
@@ -148,7 +186,10 @@ def _leer_plan(meta):
 @never_cache
 @login_required
 def clientes(request):
-    return render(request, "comprobantes/clientes.html", {"clientes": Cliente.objects.order_by("nombre")})
+    filas = Cliente.objects.annotate(total_importaciones=Count("importaciones", distinct=True),
+                                    ultimo_periodo=Max("importaciones__periodo"),
+                                    total_comprobantes=Count("comprobantes", distinct=True)).order_by("nombre")
+    return render(request, "comprobantes/clientes.html", {"clientes": filas})
 
 
 @never_cache
@@ -225,7 +266,7 @@ def cargar(request):
         except (ValueError, OSError):
             if ruta:
                 ruta.unlink(missing_ok=True)
-            formulario.add_error("archivo", "No se pudo procesar el archivo. Revisá el formato.")
+            formulario.add_error("archivo", "No se pudo procesar el archivo. Revisar el formato.")
     return render(request, "comprobantes/formulario.html", {"formulario": formulario,
                                                              "titulo": "Subir comprobantes"})
 
@@ -240,14 +281,14 @@ def vista_previa(request):
         verificar(meta["token"])
         cliente, plan, _ = _leer_plan(meta)
     except (ValueError, signing.BadSignature, signing.SignatureExpired):
-        return HttpResponseBadRequest("La vista previa venció o cambió. Volvé a subir el archivo.")
+        return HttpResponseBadRequest("La vista previa venció o cambió. Volver a subir el archivo.")
     archivo = plan.archivos[0]
     cantidades_operacion = (archivo.comprobantes["operacion"].value_counts().to_dict()
                            if "operacion" in archivo.comprobantes else {})
     return render(request, "comprobantes/vista_previa.html", {
         "cliente": cliente, "periodo": plan.periodo, "archivo": archivo,
-        "validas": archivo.comprobantes.head(50).to_dict("records"),
-        "observadas": archivo.observaciones.head(50).to_dict("records"),
+        "validas": _filas_tabla(archivo.comprobantes),
+        "observadas": _filas_tabla(archivo.observaciones),
         "columnas_validas": archivo.comprobantes.columns,
         "columnas_observadas": archivo.observaciones.columns,
         "cantidad_validas": len(archivo.comprobantes), "cantidad_observadas": len(archivo.observaciones),
@@ -277,7 +318,7 @@ def confirmar(request):
         cliente, plan, ruta = _leer_plan(meta)
     except (ValueError, signing.BadSignature, signing.SignatureExpired):
         request.session.pop("preview", None)
-        return HttpResponseBadRequest("La vista previa venció o cambió. Volvé a subir el archivo.")
+        return HttpResponseBadRequest("La vista previa venció o cambió. Volver a subir el archivo.")
     candado = Path(str(ruta) + ".lock")
     try:
         with candado.open("x"):
@@ -288,12 +329,12 @@ def confirmar(request):
         with transaction.atomic():
             for operacion in _operaciones_del_plan(plan):
                 if version_operacion(cliente, plan.periodo, operacion) != meta["versiones"][operacion]:
-                    raise ValueError("Hay una importación más reciente. Volvé a revisar el archivo.")
+                    raise ValueError("Hay una importación más reciente. Volver a revisar el archivo.")
             confirmar_importacion(plan, RepositorioDjango())
         messages.success(request, "Importación confirmada.")
         return redirect("clientes")
     except (ValueError, IntegrityError):
-        return HttpResponse("No se confirmó: los datos cambiaron o son incompatibles. Volvé a subir el archivo.",
+        return HttpResponse("No se confirmó: los datos cambiaron o son incompatibles. Volver a subir el archivo.",
                             status=409)
     finally:
         request.session.pop("preview", None)
