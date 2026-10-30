@@ -19,6 +19,8 @@ reporte_*.xlsx
 comprobantes.db
 *.db
 db.sqlite3
+*.sqlite3
+automatizador-previews/
 media/
 staticfiles/
 datos/
