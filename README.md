@@ -1,236 +1,144 @@
 # Automatizador de comprobantes e informes de IVA
 
-[![CI](https://github.com/SantinelliGabriel/automatizador-reportes/actions/workflows/tests.yml/badge.svg)](https://github.com/SantinelliGabriel/automatizador-reportes/actions/workflows/tests.yml) [![Cobertura](https://img.shields.io/codecov/c/github/SantinelliGabriel/automatizador-reportes/main?logo=codecov)](https://codecov.io/gh/SantinelliGabriel/automatizador-reportes) [![Python](https://img.shields.io/badge/Python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/) [![Demo en Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/)
+Herramienta para estudios contables argentinos: revisa ventas y compras y genera informes mensuales en Excel.
 
-Herramienta para revisar comprobantes de ventas y compras, registrar observaciones y producir informes mensuales en Excel.
+[![CI](https://github.com/SantinelliGabriel/automatizador-reportes/actions/workflows/tests.yml/badge.svg)](https://github.com/SantinelliGabriel/automatizador-reportes/actions/workflows/tests.yml) [![Cobertura](https://img.shields.io/codecov/c/github/SantinelliGabriel/automatizador-reportes/main)](https://codecov.io/gh/SantinelliGabriel/automatizador-reportes) [![Python 3.11 a 3.13](https://img.shields.io/badge/Python-3.11%E2%80%933.13-blue)](https://www.python.org/) [![Demo Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/) [![MIT](https://img.shields.io/badge/Licencia-MIT-green)](LICENSE)
 
-<sub><strong>English summary:</strong> A Python tool for validating invoices and credit/debit notes, importing ARCA exports, and producing Argentine VAT (IVA) reports.<br>It combines source adapters, SQLite history, bank reconciliation, and a synthetic Streamlit demo.</sub>
+![Recorrido con datos sintéticos y salida Excel](docs/images/flujo-demo.gif)
 
-**Estado:** proyecto personal de portfolio · **Versión:** [0.2.0](CHANGELOG.md)
-
-![Recorrido de la demo sintética y el informe Excel generado](docs/images/flujo-demo.gif)
-
-> Proyecto de apoyo a la revisión. No presenta declaraciones ni reemplaza la validación profesional.
+[English](README.en.md)
 
 ## Índice
 
-[Problema](#problema) · [Funcionalidades](#funcionalidades) · [Demo](#demo) · [Uso](#instalación-y-uso) · [Web](#interfaz-web) · [Flujo](#flujo) · [Diseño](#decisiones-de-diseño) · [Limitaciones](#limitaciones-y-próximos-pasos) · [Desarrollo](#desarrollo)
+[Problema](#qué-problema-resuelve) · [Prueba rápida](#probalo-en-2-minutos) · [Capacidades](#qué-incluye) · [Flujo](#cómo-funciona) · [Diseño](#decisiones-de-diseño) · [Estado](#estado-y-límites) · [Documentación](#documentación) · [Desarrollo](#desarrollo) · [Estructura](#estructura) · [Privacidad](#datos-y-privacidad) · [Licencia](#licencia)
 
-## Problema
+## Qué problema resuelve
 
-Un estudio contable recibe archivos de varios clientes y necesita revisar comprobantes antes de consolidar cada período. El programa valida filas, conserva las aceptadas y reúne las observadas con el motivo.
+Un estudio contable recibe archivos de varios clientes y necesita revisar comprobantes antes de consolidar el mes.
+La herramienta conserva las filas aceptadas y reúne las observadas con el motivo para facilitar su corrección.
 
-## Funcionalidades
+## Probalo en 2 minutos
 
-### Importación y validación
-- Procesa ventas y compras; valida CUIT, período, tipo, alícuotas, importes y duplicados.
-- Reconoce alias de encabezados, usa el `tipo_cambio` informado en el archivo y conserva el desglose de varias alícuotas por comprobante cuando viene en el origen.
+[Abrir la demo Streamlit con datos ficticios](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/), sin instalación ni carga de archivos.
+Para ejecutar el ejemplo desde un clon: Python 3.11 a 3.13, probados en CI. [Instalación detallada](docs/instalacion.md).
 
-### Informes
-- Produce hojas de comprobantes, detalle de IVA, resúmenes por cliente y alícuota y observaciones.
-- Conserva historial por cliente y período. [Ver libro de ejemplo](ejemplos/salida.xlsx).
+### PowerShell
 
-![Resumen de ejemplo generado en Excel](docs/images/reporte-demo.png)
-
-### Integraciones
-- Importa archivos estándar, exportaciones de Mis Comprobantes ARCA y plantillas Holistor.
-- Sugiere coincidencias para extractos bancarios y consulta vencimientos por terminación de CUIT en un calendario cargado por el usuario.
-
-### Interfaces
-- CLI instalable, interfaz Streamlit local y demo con datos sintéticos sin carga de archivos.
-
-## Demo
-
-**Demo en vivo:** [Abrir la aplicación](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/)
-
-Ejecución local en PowerShell, macOS o Linux:
-```bash
-streamlit run demo.py
-```
-Guía de [configuración y despliegue](docs/demo-streamlit.md).
-
-## Instalación y uso
-
-Requiere Python 3.11 o posterior. PowerShell:
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install -e .
 automatizador --period 2026-09
 ```
-Opcional en PowerShell: si `Activate.ps1` está bloqueado, ejecutá `Set-ExecutionPolicy -Scope Process Bypass` antes de activar el entorno; el cambio dura solo esa sesión.
 
-macOS o Linux:
+### macOS y Linux
+
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 python -m pip install -e .
 automatizador --period 2026-09
 ```
-Sin `--input`, la CLI usa `ejemplos/Cliente Demo Norte.xlsx`; genera `reporte_iva.xlsx` y `comprobantes.db` en el directorio actual. `--period` es obligatorio.
+La CLI lee `ejemplos/Cliente Demo Norte.xlsx` y genera `reporte_iva.xlsx` y `comprobantes.db`.
 
-Para procesar una carpeta con rutas explícitas, PowerShell:
-```powershell
-automatizador-demo
-automatizador `
-  --input datos_demo `
-  --output resultados/reporte.xlsx `
-  --database resultados/comprobantes.db `
-  --period 2026-09
-```
-macOS o Linux:
-```bash
-automatizador-demo
-automatizador \
-  --input datos_demo \
-  --output resultados/reporte.xlsx \
-  --database resultados/comprobantes.db \
-  --period 2026-09
-```
-`automatizador-demo` crea dos archivos sintéticos en `datos_demo/`.
+## Qué incluye
 
-Más detalles de [adaptadores ARCA/Holistor](docs/adaptadores.md).
-
-## Interfaz web
-
-La interfaz Django permite iniciar sesión, dar de alta clientes, subir comprobantes y revisar filas válidas y observadas antes de confirmar la importación. Muestra el historial y las observaciones vigentes, y descarga un informe consolidado por período. Se ejecuta en local; este repositorio no ofrece un servicio web público de Django. La CLI y Streamlit funcionan sin la dependencia web.
-
-| Clientes | Historial |
+| Capacidad | Alcance |
 | --- | --- |
-| ![Clientes ficticios en la web](docs/images/web-clientes.png) | ![Historial de importaciones sintéticas](docs/images/web-historial.png) |
-| Observaciones en móvil | Informe consolidado |
-| ![Observaciones vigentes en móvil](docs/images/web-observaciones-movil.png) | ![Página de descarga del informe](docs/images/web-informe.png) |
+| Importación y validación | Alias, CUIT, período, duplicados, moneda extranjera y varias alícuotas |
+| Informes Excel | Comprobantes, detalle IVA, resúmenes y observaciones |
+| ARCA y Holistor | Adaptadores de exportaciones y mapeos configurables |
+| Conciliación bancaria | Coincidencias sugeridas para revisión |
+| Vencimientos | Consulta por terminación de CUIT en un calendario aportado |
 
-Desde la raíz del repositorio, creá y activá el entorno virtual como se indica en «Instalación y uso» e instalá la dependencia web:
+### Interfaces
 
-```bash
-python -m pip install -e ".[web]"
-```
+| Interfaz | Alcance |
+| --- | --- |
+| CLI | Comando instalable para archivos, carpetas e historial |
+| Streamlit | Importación local, conciliación, agenda y demo sintética |
+| Web Django | Carga segura, vista previa, historial, observaciones, informe consolidado y modo demo |
 
-Para iniciarla en PowerShell, configurá las variables de entorno, aplicá las migraciones y creá el primer usuario. `createsuperuser` solicita nombre de usuario y contraseña en la terminal; no los guardes en el repositorio.
+### Capturas con datos ficticios
 
-```powershell
-$env:DJANGO_DEBUG = "1"
-$env:DJANGO_ALLOWED_HOSTS = "127.0.0.1,localhost"
-$env:DJANGO_SECRET_KEY = (& python -c "import secrets; print(secrets.token_urlsafe(64))")
-python web/manage.py migrate
-python web/manage.py createsuperuser
-python web/manage.py runserver
-```
+| Historial | Observaciones en móvil |
+| --- | --- |
+| ![Historial web](docs/images/web-historial.png) | ![Observaciones en móvil](docs/images/web-observaciones-movil.png) |
 
-En macOS o Linux:
+La [guía web](docs/web.md) contiene todas las capturas y los pasos para ejecutarla.
 
-```bash
-export DJANGO_DEBUG=1
-export DJANGO_ALLOWED_HOSTS=127.0.0.1,localhost
-export DJANGO_SECRET_KEY="$(python -c 'import secrets; print(secrets.token_urlsafe(64))')"
-python web/manage.py migrate
-python web/manage.py createsuperuser
-python web/manage.py runserver
-```
-
-Abrí `http://127.0.0.1:8000/login/` e ingresá con ese usuario. `DJANGO_DEBUG=1` habilita el modo de desarrollo local. Fuera de ese modo, `DJANGO_SECRET_KEY` es obligatoria y `DJANGO_ALLOWED_HOSTS` debe contener los dominios permitidos; conservá la clave de forma segura fuera del repositorio.
-
-Para probar la carga web, creá un cliente y subí `ejemplos/Cliente Demo Norte.xlsx` con período `2026-09`, origen **Estándar** y operación **Mixto: según la columna del archivo**. El ejemplo contiene ventas y compras; la vista previa muestra cada operación antes de confirmar.
-
-La web también muestra el historial, las observaciones vigentes y permite descargar el informe consolidado del período para todos los clientes.
-
-### Modo demo local
-
-Usá una base separada y una contraseña elegida para la sesión. Después de instalar `.[web]`, en PowerShell:
-
-```powershell
-New-Item -ItemType Directory -Force resultados | Out-Null
-$env:DJANGO_DEBUG = "1"
-$env:DJANGO_DEMO_MODE = "1"
-$env:DJANGO_DB_PATH = "resultados/demo.sqlite3"
-$env:DJANGO_DEMO_PASSWORD = Read-Host "Contraseña de demo"
-python web/manage.py migrate
-python web/manage.py reconstruir_demo
-python web/manage.py runserver
-```
-
-En macOS o Linux:
-
-```bash
-mkdir -p resultados
-export DJANGO_DEBUG=1 DJANGO_DEMO_MODE=1 DJANGO_DB_PATH=resultados/demo.sqlite3
-read -r -s -p "Contraseña de demo: " DJANGO_DEMO_PASSWORD; echo
-export DJANGO_DEMO_PASSWORD
-python web/manage.py migrate
-python web/manage.py reconstruir_demo
-python web/manage.py runserver
-```
-
-Entrá en `/login/` con el usuario `demo` y la contraseña elegida. `reconstruir_demo` es idempotente: vuelve a cargar los archivos sintéticos de `ejemplos/`. La demo permite consultar clientes, historial, observaciones e informes; impide altas y cargas, y deshabilita el admin.
-
-`DJANGO_DEMO_MODE=1` activa el modo demo. Si queda encendido en una instalación de uso real, el alta de clientes, la carga y la confirmación responden 403 y el admin queda deshabilitado; las consultas y descargas siguen disponibles tras iniciar sesión. `reconstruir_demo` solo admite una base dedicada llamada `demo.sqlite3` y se niega a modificar datos ajenos a los ejemplos.
-
-## Migración de la base
-
-Al abrir una base SQLite anterior, el programa migra su esquema y crea un respaldo `.v0.bak.db`, `.v1.bak.db` o `.v2.bak.db`, según la versión de origen, antes de hacerlo. La CLI y la interfaz local muestran la ruta del respaldo; conservá esa copia hasta revisar los informes generados. La migración a v3 registra en el historial las operaciones que todavía pueden identificarse por sus comprobantes; las importaciones antiguas sin comprobantes asociados quedan con la operación vacía.
-
-## Flujo
+## Cómo funciona
 
 ```mermaid
 flowchart LR
-    A[Excel / CSV / PRN] --> B[Adaptador y normalización]
-    B --> C[Validación por comprobante]
-    C -->|Aceptado| D[Comprobantes válidos]
-    C -->|Observado con motivo| E[Observaciones]
-    D -->|CLI o confirmar en Streamlit| F[SQLite por cliente, período y operación]
-    E --> G[Informe Excel]
-    F --> G
+    A[Archivos] --> B[Adaptación y validación] --> C[Vista previa: válidos y observados]
+    C --> D[Confirmación: CLI / Streamlit / web]
+    D --> E[Repositorio: SQLite o Django]
+    E --> F[Informe Excel]
 ```
+[Arquitectura y contrato de persistencia](docs/arquitectura.md).
 
 ## Decisiones de diseño
-- Usa `Decimal` para redondear a dos decimales y guarda importes en SQLite como centavos enteros.
-- Reimportar reemplaza solo las operaciones con filas aceptadas del mismo cliente y período, dentro de una transacción; conserva las demás operaciones, otros períodos y el historial. Si dos archivos del mismo lote compiten por una operación, ninguno de ellos se aplica y se informa el conflicto. Un archivo sin filas aceptadas no reemplaza comprobantes.
-- Las filas rechazadas quedan observadas con el motivo, sin abortar el lote completo.
-- Las observaciones vigentes de cada operación incluyen las de su última importación aplicada (con filas aceptadas) y las de intentos posteriores no aplicados; una nueva aplicación reemplaza ese conjunto. Las observaciones sin operación identificable siguen vigentes hasta la siguiente aplicación del cliente y período. El historial indica si cada intento se aplicó, entró en conflicto o no tuvo filas aceptadas.
-- Para moneda extranjera usa el `tipo_cambio` informado en el archivo; no consulta una cotización externa.
 
-## Limitaciones y próximos pasos
-- No hay conexión directa a ARCA ni Holistor; detalles en [adaptadores](docs/adaptadores.md).
-- La [conciliación](docs/conciliacion.md) sugiere coincidencias para revisión; la [agenda](docs/vencimientos.md) requiere mantener un calendario.
-- La demo usa el ejemplo sintético y oculta la carga de archivos.
-- Próximos pasos: ampliar fixtures sintéticos para distintas variantes de ARCA/Holistor y preparar un ejecutable de Windows con PyInstaller.
+- Importes en centavos enteros y cálculos con Decimal; [detalle](docs/diseno.md#dinero-y-decimales).
+- Alícuota y tipo de cambio en texto decimal canónico, nunca float en la base; [detalle](docs/diseno.md#dinero-y-decimales).
+- Reemplazo por cliente, período y operación; [detalle](docs/diseno.md#alcance-del-reemplazo).
+- Filas observadas en lugar de abortar el lote completo; [detalle](docs/diseno.md#filas-observadas-e-historial).
+- Contrato con repositorios SQLite y Django; [detalle](docs/diseno.md#persistencia-e-informes).
+- Observaciones vigentes desde la última aplicación y los intentos posteriores; [detalle](docs/diseno.md#filas-observadas-e-historial).
+- Vista previa web con token de un solo uso y vencimiento; [detalle](docs/diseno.md#vista-previa-web).
+
+## Estado y límites
+
+Versión [0.2.0](CHANGELOG.md), proyecto personal de portfolio y apoyo a la revisión contable.
+No reemplaza la validación profesional ni presenta declaraciones. No hay conexión directa a ARCA ni Holistor.
+La web Django se ejecuta en local; no se ofrece como servicio público.
+Al migrar una base SQLite existente se crea un respaldo previo según su versión de origen.
+La CLI y Streamlit informan su ubicación; se debe conservar hasta revisar el resultado. [Guía de migración](docs/migracion.md).
+
+## Documentación
+
+[Instalación](docs/instalacion.md) · [Web Django](docs/web.md) · [Diseño](docs/diseno.md) · [Arquitectura](docs/arquitectura.md) · [Migración](docs/migracion.md).
+[Adaptadores](docs/adaptadores.md) · [Conciliación](docs/conciliacion.md) · [Vencimientos](docs/vencimientos.md) · [Demo Streamlit](docs/demo-streamlit.md).
 
 ## Desarrollo
 
-Instalación y controles de calidad, desde la raíz del repo:
+Controles del [CI](https://github.com/SantinelliGabriel/automatizador-reportes/actions/workflows/tests.yml); [preparación de variables](docs/instalacion.md#entorno-para-controles-de-desarrollo).
 ```bash
 python -m pip install -e ".[dev,web]"
 ruff check .
 coverage run -m unittest discover -s tests -v
 coverage report -m
+coverage xml
 ```
-GitHub Actions ejecuta los controles en Linux y Windows.
+
+### Comprobaciones Django
+
+```bash
+python web/manage.py check
+python web/manage.py check --deploy
+python web/manage.py makemigrations --check --dry-run
+python web/manage.py collectstatic --noinput
+```
+El CI repite `check --deploy` con modo demo activo y envía cobertura a Codecov en Linux.
+La suite incluye la comprobación de enlaces e imágenes de la documentación.
 
 ## Estructura
 
 ```text
-automatizador/                  Paquete: lógica, CLI, adaptadores e interfaz
-web/                            Proyecto Django opcional: modelos, repositorio, plantillas y CSS
-tests/                          Pruebas por módulo
-tests/fixtures/arca/            CSV sintético de Mis Comprobantes
-ejemplos/                       Entradas, salida y calendario sintéticos
-datos_demo/                     Archivos sintéticos de demostración
-docs/                           Guías técnicas e imágenes
-demo.py                         Entrada Streamlit de la demo pública
-main.py                         Entrada de compatibilidad para la CLI
-interfaz.py                     Entrada de compatibilidad para Streamlit
-generar_datos_demo.py           Generador de ejemplos sintéticos
-holistor_mapping.example.json   Mapeo de referencia para Holistor
-pyproject.toml                  Metadatos, dependencias y comandos
-CHANGELOG.md                    Historial de versiones
-LICENSE                         Licencia MIT
+automatizador/   Núcleo, CLI, Streamlit, adaptadores y repositorio SQLite
+web/             Configuración Django, modelos, repositorio, pantallas y estáticos
+tests/           Suite y fixtures sintéticos, incluido tests/fixtures/arca/
+ejemplos/, datos_demo/   Entradas y salidas sintéticas
+docs/, .github/, .streamlit/   Guías e imágenes; CI y configuración Streamlit
 ```
+Raíz: `main.py`, `interfaz.py`, `generar_datos_demo.py`, `demo.py`, `holistor_mapping.example.json`, `pyproject.toml`, `requirements.txt`, `.gitignore`, `AGENTS.md`, `CHANGELOG.md`, `LICENSE`, `README.md` y `README.en.md`. [Responsabilidades](docs/arquitectura.md#archivos-de-la-raíz).
 
 ## Datos y privacidad
 
-Los ejemplos incluidos son sintéticos. `.gitignore` excluye `*.db`, `reporte_*.xlsx` y los directorios `datos/` y `resultados/`, usados para entradas y salidas locales.
+Solo se incluyen datos sintéticos. `.gitignore` excluye `*.db`, `*.sqlite3`, `db.sqlite3`, `reporte_*.xlsx`, `datos/`, `resultados/`, `media/` y `automatizador-previews/`.
+Las vistas previas web usan por defecto un directorio temporal fuera del repositorio; no se deben colocar bajo rutas servidas.
 
 ## Licencia
 
-Distribuido bajo la [licencia MIT](LICENSE). [Cambios por versión](CHANGELOG.md).
+Distribuido bajo [MIT](LICENSE). [Cambios por versión](CHANGELOG.md).
