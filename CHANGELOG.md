@@ -4,6 +4,8 @@ Los cambios relevantes de cada versión se registran en este archivo.
 
 ## [0.2.0] - 2026-10-28
 
+- README reorganizado como página de entrada, con guías técnicas en docs/, resumen en inglés y verificación automática de enlaces e imágenes.
+
 - La interfaz web local incorpora navegación, diseño adaptable, modo oscuro automático y páginas de error propias.
 - La migración SQLite v3 respalda la base y registra las operaciones; el reemplazo se limita a las operaciones aceptadas de cada cliente y período.
 - Las observaciones vigentes consideran los intentos posteriores no aplicados y el historial muestra su estado derivado.
