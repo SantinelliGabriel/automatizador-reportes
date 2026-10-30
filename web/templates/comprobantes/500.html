@@ -1,5 +1,5 @@
 {% extends "comprobantes/base.html" %}
 {% block titulo_pagina %}Error del servicio · Automatizador{% endblock %}
 {% block contenido %}
-<section class="panel error-panel"><p class="error-panel__code">ERROR 500</p><h1>No pudimos completar la solicitud</h1><p class="lede">Probá de nuevo en unos minutos.</p><a class="button" href="{% url 'clientes' %}">Volver a clientes</a></section>
+<section class="panel error-panel"><p class="error-panel__code">ERROR 500</p><h1>No se pudo completar la solicitud</h1><p class="lede">Intentar de nuevo en unos minutos.</p><a class="button" href="{% url 'clientes' %}">Volver a clientes</a></section>
 {% endblock %}

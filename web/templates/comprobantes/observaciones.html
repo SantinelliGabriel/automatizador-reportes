@@ -9,8 +9,8 @@
   <button class="button" type="submit">Filtrar</button>
 </form></section>
 <section class="section-block">
-{% if observaciones %}<div class="table-scroll"><table class="data-table"><thead><tr><th scope="col">Cliente</th><th scope="col">Período</th><th scope="col">Operación</th><th scope="col">Fila</th><th scope="col">Motivo</th><th scope="col">Archivo de origen</th></tr></thead><tbody>
+{% if observaciones %}<div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos"><table class="data-table"><thead><tr><th scope="col">Cliente</th><th scope="col">Período</th><th scope="col">Operación</th><th scope="col">Fila</th><th scope="col">Motivo</th><th scope="col">Archivo de origen</th></tr></thead><tbody>
 {% for fila in observaciones %}<tr><td>{{ fila.cliente }}</td><td>{{ fila.periodo }}</td><td>{{ fila.operacion|default:"Sin identificar" }}</td><td class="numeric">{{ fila.fila_excel }}</td><td>{{ fila.motivo }}</td><td>{{ fila.archivo_origen }}</td></tr>{% endfor %}
-</tbody></table></div>{% include "comprobantes/_paginacion.html" %}{% else %}<div class="empty-state"><h2>No hay observaciones vigentes para este filtro</h2><p>Probá con otro período, cliente u operación.</p><a class="button" href="{% url 'historial' %}">Ver historial</a></div>{% endif %}
+</tbody></table></div>{% include "comprobantes/_paginacion.html" %}{% else %}<div class="empty-state"><h2>No hay observaciones vigentes para este filtro</h2><p>Intentar con otro período, cliente u operación.</p><a class="button" href="{% url 'historial' %}">Ver historial</a></div>{% endif %}
 </section>
 {% endblock %}

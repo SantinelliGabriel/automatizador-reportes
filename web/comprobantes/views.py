@@ -13,6 +13,7 @@ from django.contrib.auth.decorators import login_required
 from django.conf import settings
 from django.core import signing
 from django.db import IntegrityError, transaction
+from django.db.models import Count, Max
 from django.http import HttpResponse, HttpResponseBadRequest
 from django.core.paginator import Paginator
 from django.shortcuts import get_object_or_404, redirect, render
@@ -68,8 +69,12 @@ def error_servidor(request):
 @login_required
 def historial(request):
     filas = RepositorioDjango().consultar_importaciones().to_dict("records")
+    cliente = request.GET.get("cliente", "")
+    if cliente:
+        filas = [fila for fila in filas if fila["cliente"] == cliente]
     pagina = Paginator(filas, 50).get_page(request.GET.get("page"))
-    return render(request, "comprobantes/historial.html", {"importaciones": pagina, "page_obj": pagina})
+    return render(request, "comprobantes/historial.html", {"importaciones": pagina, "page_obj": pagina,
+                  "filtros_query": urlencode({"cliente": cliente}) if cliente else ""})
 
 
 @never_cache
@@ -86,7 +91,7 @@ def observaciones(request):
     cliente = request.GET.get("cliente", "")
     operacion = request.GET.get("operacion", "")
     if periodo and not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", periodo):
-        return HttpResponseBadRequest("Período inválido. Usá AAAA-MM.")
+        return HttpResponseBadRequest("Período inválido. Usar AAAA-MM.")
     if operacion not in {"", "ventas", "compras"}:
         return HttpResponseBadRequest("Operación inválida.")
     tabla = RepositorioDjango().consultar_observaciones(periodo or None)
@@ -108,7 +113,7 @@ def observaciones(request):
 @login_required
 def descargar_informe(request, periodo):
     if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", periodo):
-        return HttpResponseBadRequest("Período inválido. Usá AAAA-MM.")
+        return HttpResponseBadRequest("Período inválido. Usar AAAA-MM.")
     repositorio = RepositorioDjango()
     if repositorio.consultar_comprobantes(periodo).empty:
         return render(request, "comprobantes/sin_informe.html", {"periodo": periodo})
@@ -129,7 +134,7 @@ def _error_generico(plan):
         if "motivo" in archivo.observaciones:
             motivos = archivo.observaciones["motivo"].astype(str)
             mascara = motivos.str.startswith("No se pudo procesar el archivo:")
-            archivo.observaciones.loc[mascara, "motivo"] = "No se pudo interpretar el archivo. Revisá el formato."
+            archivo.observaciones.loc[mascara, "motivo"] = "No se pudo interpretar el archivo. Revisar el formato."
 
 
 def _mapeo(origen):
@@ -181,7 +186,10 @@ def _leer_plan(meta):
 @never_cache
 @login_required
 def clientes(request):
-    return render(request, "comprobantes/clientes.html", {"clientes": Cliente.objects.order_by("nombre")})
+    filas = Cliente.objects.annotate(total_importaciones=Count("importaciones", distinct=True),
+                                    ultimo_periodo=Max("importaciones__periodo"),
+                                    total_comprobantes=Count("comprobantes", distinct=True)).order_by("nombre")
+    return render(request, "comprobantes/clientes.html", {"clientes": filas})
 
 
 @never_cache
@@ -258,7 +266,7 @@ def cargar(request):
         except (ValueError, OSError):
             if ruta:
                 ruta.unlink(missing_ok=True)
-            formulario.add_error("archivo", "No se pudo procesar el archivo. Revisá el formato.")
+            formulario.add_error("archivo", "No se pudo procesar el archivo. Revisar el formato.")
     return render(request, "comprobantes/formulario.html", {"formulario": formulario,
                                                              "titulo": "Subir comprobantes"})
 
@@ -273,7 +281,7 @@ def vista_previa(request):
         verificar(meta["token"])
         cliente, plan, _ = _leer_plan(meta)
     except (ValueError, signing.BadSignature, signing.SignatureExpired):
-        return HttpResponseBadRequest("La vista previa venció o cambió. Volvé a subir el archivo.")
+        return HttpResponseBadRequest("La vista previa venció o cambió. Volver a subir el archivo.")
     archivo = plan.archivos[0]
     cantidades_operacion = (archivo.comprobantes["operacion"].value_counts().to_dict()
                            if "operacion" in archivo.comprobantes else {})
@@ -310,7 +318,7 @@ def confirmar(request):
         cliente, plan, ruta = _leer_plan(meta)
     except (ValueError, signing.BadSignature, signing.SignatureExpired):
         request.session.pop("preview", None)
-        return HttpResponseBadRequest("La vista previa venció o cambió. Volvé a subir el archivo.")
+        return HttpResponseBadRequest("La vista previa venció o cambió. Volver a subir el archivo.")
     candado = Path(str(ruta) + ".lock")
     try:
         with candado.open("x"):
@@ -321,12 +329,12 @@ def confirmar(request):
         with transaction.atomic():
             for operacion in _operaciones_del_plan(plan):
                 if version_operacion(cliente, plan.periodo, operacion) != meta["versiones"][operacion]:
-                    raise ValueError("Hay una importación más reciente. Volvé a revisar el archivo.")
+                    raise ValueError("Hay una importación más reciente. Volver a revisar el archivo.")
             confirmar_importacion(plan, RepositorioDjango())
         messages.success(request, "Importación confirmada.")
         return redirect("clientes")
     except (ValueError, IntegrityError):
-        return HttpResponse("No se confirmó: los datos cambiaron o son incompatibles. Volvé a subir el archivo.",
+        return HttpResponse("No se confirmó: los datos cambiaron o son incompatibles. Volver a subir el archivo.",
                             status=409)
     finally:
         request.session.pop("preview", None)

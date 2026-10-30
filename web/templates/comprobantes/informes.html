@@ -1,9 +1,9 @@
 {% extends "comprobantes/base.html" %}
 {% block titulo_pagina %}Informe consolidado · Automatizador{% endblock %}
 {% block contenido %}
-<div class="page-heading"><div><p class="eyebrow">Informes</p><h1>Informe consolidado del período: todos los clientes</h1><p class="lede">Seleccioná un período para descargar el Excel con comprobantes y observaciones vigentes.</p></div></div>
+<div class="page-heading"><div><p class="eyebrow">Informes</p><h1>Informe consolidado del período: todos los clientes</h1><p class="lede">Seleccionar un período para descargar el Excel con comprobantes y observaciones vigentes.</p></div></div>
 {% if periodos %}
-<section class="panel"><h2>Períodos disponibles</h2><div class="table-scroll"><table class="data-table"><thead><tr><th scope="col">Período</th><th scope="col">Informe</th></tr></thead><tbody>
+<section class="panel"><h2>Períodos disponibles</h2><div class="table-scroll" tabindex="0" role="region" aria-label="Tabla de datos"><table class="data-table"><thead><tr><th scope="col">Período</th><th scope="col">Informe</th></tr></thead><tbody>
 {% for periodo in periodos %}<tr><td>{{ periodo }}</td><td><a href="{% url 'descargar_informe' periodo %}" aria-label="Descargar informe consolidado de {{ periodo }}">Descargar Excel</a></td></tr>{% endfor %}
 </tbody></table></div></section>
 {% else %}<section class="empty-state"><h2>Todavía no hay períodos</h2><p>Cuando se confirme una importación, el período aparecerá aquí.</p>{% if user.is_staff and not DEMO_MODE %}<a class="button button--primary" href="{% url 'cargar' %}">Subir un archivo</a>{% else %}<a class="button" href="{% url 'historial' %}">Ver historial</a>{% endif %}</section>{% endif %}

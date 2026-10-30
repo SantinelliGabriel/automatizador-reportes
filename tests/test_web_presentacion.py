@@ -79,6 +79,33 @@ class TestWebPresentacion(unittest.TestCase):
                     if destino.path.startswith("/") and not destino.path.startswith("/static/"):
                         self.assertIsNotNone(resolve(destino.path).url_name, enlace)
 
+    def test_parser_detecta_html_no_accesible(self):
+        parser = ElementosHTML()
+        parser.feed('<style></style><script></script><p style="color:red"></p><th>Sin scope</th>')
+        self.assertEqual(parser.inline, ["style", "script", "p"])
+        self.assertEqual(len(parser.headers_without_scope), 1)
+
+    def test_version_sin_paquete_instalado(self):
+        from importlib.metadata import PackageNotFoundError
+        from web.comprobantes.contexto import modo_demo
+        with patch("web.comprobantes.contexto.version", side_effect=PackageNotFoundError):
+            self.assertEqual(modo_demo(None)["VERSION_APP"], "0.2.0")
+
+    def test_clientes_con_metricas_y_enlace_a_historial_filtrado(self):
+        from web.comprobantes.models import Cliente, Importacion
+        cliente = Cliente.objects.create(nombre="Cliente Sintético")
+        otro = Cliente.objects.create(nombre="Otro Sintético")
+        for item in (cliente, otro):
+            Importacion.objects.create(cliente=item, periodo="2026-09", archivo_origen=item.nombre,
+                                       aceptados=0, rechazados=1)
+        pagina = self.cliente.get("/").content.decode()
+        self.assertIn("Último período", pagina)
+        self.assertIn("Comprobantes", pagina)
+        self.assertIn("?cliente=", pagina)
+        historial = self.cliente.get("/historial/", {"cliente": cliente.nombre}).content.decode()
+        self.assertIn(cliente.nombre, historial)
+        self.assertNotIn(otro.nombre, historial)
+
     def test_html_sin_estilos_ni_scripts_en_linea_y_campos_etiquetados(self):
         paginas = [Client().get("/login/"), self.cliente.get("/"), self.cliente.get("/cargar/"),
                    self.cliente.get("/clientes/nuevo/"), self.cliente.get("/historial/"),
@@ -132,7 +159,3 @@ class TestWebPresentacion(unittest.TestCase):
                 self.assertEqual(respuesta.status_code, 200)
                 self.assertGreater(len(b"".join(respuesta.streaming_content)), 20)
                 respuesta.close()
-
-
-if __name__ == "__main__":
-    unittest.main()
