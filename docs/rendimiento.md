@@ -95,3 +95,11 @@ esos valores a Django ni aumentar concurrencia sin medirla.
 Mensaje propuesto, sin cambiar la web: «El período supera los 10.000
 comprobantes recomendados para descarga interactiva. La generación puede
 tardar y consumir memoria; utilizar la CLI local para este volumen».
+
+## Próximos pasos posibles
+
+- Evaluar la reutilización de objetos de estilo para reducir su creación repetida.
+- Comparar un motor de escritura alternativo, verificando la misma compatibilidad.
+- Evaluar formato por columna para reducir el trabajo de formato celda por celda.
+
+Son alternativas para medir en experimentos separados; no están implementadas.
