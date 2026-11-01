@@ -4,6 +4,7 @@ import json
 from decimal import Decimal
 
 from openpyxl import load_workbook
+from openpyxl.compat.strings import safe_string
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 import pandas as pd
@@ -102,7 +103,29 @@ def construir_detalle_alicuotas(comprobantes):
 
 
 def aplicar_formato_excel(ruta_archivo):
+    """Compatibilidad para formatear un libro que ya está guardado."""
     libro = load_workbook(ruta_archivo)
+    try:
+        formatear_libro_excel(libro)
+        libro.save(ruta_archivo)
+    finally:
+        libro.close()
+
+
+def _longitud_serializada(celda):
+    """Mide como el archivo releído anterior, sin modificar el importe guardado."""
+    valor = celda.value
+    if celda.data_type == "n" and valor is not None:
+        # El formato anterior medía tras guardar/releer: openpyxl serializa
+        # números con 16 cifras significativas. Replicar solo para el ancho,
+        # sin cambiar valores (test_libros_equivalentes_a_la_linea_base).
+        texto = safe_string(valor)
+        valor = json.loads(texto) if texto else None
+    return len(str(valor or ""))
+
+
+def formatear_libro_excel(libro):
+    """Aplica el formato al workbook abierto; el llamador controla su guardado."""
     azul, celeste, blanco = "1F4E78", "D9EAF7", "FFFFFF"
     for hoja in libro.worksheets:
         hoja.freeze_panes = "A2"
@@ -113,8 +136,15 @@ def aplicar_formato_excel(ruta_archivo):
             celda.font = Font(bold=True, color=blanco)
             celda.alignment = Alignment(horizontal="center")
         for columna in hoja.columns:
+            for celda in columna:
+                if celda.value == "":
+                    # La primera serialización antigua convertía cadenas vacías
+                    # en celdas inlineStr sin valor. Mantener también su tipo.
+                    # Lo exige test_libros_equivalentes_a_la_linea_base (limites).
+                    celda.value = None
+                    celda.data_type = "inlineStr"
             letra = get_column_letter(columna[0].column)
-            hoja.column_dimensions[letra].width = min(max(max(len(str(c.value or "")) for c in columna) + 2, 12), 42)
+            hoja.column_dimensions[letra].width = min(max(max(_longitud_serializada(c) for c in columna) + 2, 12), 42)
             encabezado = str(hoja.cell(1, columna[0].column).value or "").casefold()
             if any(p in encabezado for p in ("neto", "iva", "total", "percepcion")):
                 for celda in columna[1:]:
@@ -128,5 +158,3 @@ def aplicar_formato_excel(ruta_archivo):
                     celda.fill = PatternFill("solid", fgColor=celeste)
         if hoja.max_row > 1:
             hoja.auto_filter.ref = f"A1:{get_column_letter(hoja.max_column)}{hoja.max_row}"
-    libro.save(ruta_archivo)
-    libro.close()

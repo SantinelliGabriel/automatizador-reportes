@@ -9,7 +9,7 @@ from unittest.mock import patch
 from xml.etree.ElementTree import tostring
 
 import pandas as pd
-from openpyxl import load_workbook
+from openpyxl import Workbook, load_workbook
 
 from automatizador.procesamiento import generar_informe
 from automatizador.repositorio import RepositorioSQLite
@@ -54,6 +54,13 @@ def xml(objeto):
 
 
 class TestExportadorExcel(unittest.TestCase):
+    def test_generar_informe_no_reabre_y_guarda_una_sola_vez(self):
+        with directorio_temporal() as carpeta:
+            with patch("automatizador.reportes.load_workbook", side_effect=AssertionError("Reapertura inesperada")), \
+                 patch.object(Workbook, "save", autospec=True, side_effect=Workbook.save) as guardar:
+                generar_caso("contable", Path(carpeta) / "nuevo.xlsx", carpeta)
+                guardar.assert_called_once()
+
     def test_libros_equivalentes_a_la_linea_base(self):
         for caso in ("contable", "vacio", "limites"):
             with self.subTest(caso=caso), directorio_temporal() as carpeta:
