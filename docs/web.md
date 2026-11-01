@@ -41,6 +41,17 @@ Para probar: crear un cliente y cargar `ejemplos/Cliente Demo Norte.xlsx`, perí
 
 La carga admite hasta 10 MiB y 10.000 filas. Las vistas previas vencen a los 30 minutos y se limpian al cargar o confirmar, o mediante `python web/manage.py limpiar_previsualizaciones`. `DJANGO_PREVIEW_DIR` configura su directorio privado, fuera de rutas servidas; en Windows debe estar dentro del temporal del usuario. El valor por defecto está en el temporal del sistema, bajo `automatizador-previews`.
 
+## Rendimiento del informe consolidado
+
+La descarga HTTP de 10.000 comprobantes sintéticos en modo demo tuvo una
+mediana de **19,5 segundos** en un equipo de escritorio. Como orientación
+para ese escenario, equivale a unos **2 segundos por cada 1.000 comprobantes**;
+es una estimación proporcional, no una garantía de crecimiento lineal.
+Para volúmenes grandes se recomienda usar la CLI local y disponer de memoria
+suficiente. Esta recomendación no agrega límites a la descarga web.
+El [informe de rendimiento](rendimiento.md#descarga-web-local-2026-11-01)
+detalla el equipo, las tres ejecuciones y las limitaciones de la medición.
+
 ## Modo demo en PowerShell
 
 Detener antes el servidor habitual y usar una base separada:
