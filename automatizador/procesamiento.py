@@ -17,7 +17,7 @@ from automatizador.database import (
 from automatizador.lotes import operaciones_aceptadas, resolver_conflictos
 from automatizador.repositorio import RepositorioComprobantes, RepositorioSQLite
 from automatizador.reportes import (
-    aplicar_formato_excel,
+    formatear_libro_excel,
     construir_detalle_alicuotas,
     construir_hojas,
 )
@@ -186,7 +186,7 @@ def generar_informe(periodo: str, salida: Path, repositorio: RepositorioComproba
         resumen_cliente.to_excel(writer, sheet_name="Resumen por cliente", index=False)
         resumen_alicuota.to_excel(writer, sheet_name="IVA por alícuota", index=False)
         observaciones.to_excel(writer, sheet_name="Observaciones", index=False)
-    aplicar_formato_excel(salida)
+        formatear_libro_excel(writer.book)
     logging.info("Período %s: reporte guardado en %s", periodo, salida)
     logging.info("Observaciones: %s", len(observaciones))
     return salida

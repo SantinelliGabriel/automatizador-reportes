@@ -98,7 +98,7 @@ La CLI y Streamlit informan su ubicación; se debe conservar hasta revisar el re
 
 ## Documentación
 
-[Instalación](docs/instalacion.md) · [Web Django](docs/web.md) · [Diseño](docs/diseno.md) · [Arquitectura](docs/arquitectura.md) · [Migración](docs/migracion.md).
+[Instalación](docs/instalacion.md) · [Web Django](docs/web.md) · [Diseño](docs/diseno.md) · [Arquitectura](docs/arquitectura.md) · [Migración](docs/migracion.md) · [Rendimiento](docs/rendimiento.md).
 [Adaptadores](docs/adaptadores.md) · [Conciliación](docs/conciliacion.md) · [Vencimientos](docs/vencimientos.md) · [Demo Streamlit](docs/demo-streamlit.md).
 
 ## Desarrollo

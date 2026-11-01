@@ -2,6 +2,10 @@
 
 Los cambios relevantes de cada versión se registran en este archivo.
 
+## Sin publicar
+
+- El exportador aplica formato sobre el libro abierto y guarda una sola vez, conservando las cinco hojas y su presentación. Regresiones con libros sintéticos y resultados en [rendimiento](docs/rendimiento.md).
+
 ## [0.2.0] - 2026-10-28
 
 - README reorganizado como página de entrada, con guías técnicas en docs/, resumen en inglés y verificación automática de enlaces e imágenes.
