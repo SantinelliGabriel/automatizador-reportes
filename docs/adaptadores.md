@@ -9,7 +9,7 @@ Los encabezados se normalizan ignorando acentos, mayúsculas, espacios y signos 
 La CLI usa el formato estándar por defecto. Para importar un archivo o una carpeta:
 
 ```powershell
-automatizador --input ejemplos/Cliente Demo Norte.xlsx --period 2026-09
+automatizador --input "ejemplos/Cliente Demo Norte.xlsx" --period 2026-09
 ```
 
 ## Mis Comprobantes ARCA
