@@ -44,6 +44,13 @@ jobs:
       - name: Run tests with coverage
         run: coverage run -m unittest discover -s tests -v
 
+      - name: Check Excel without lxml acceleration
+        env:
+          OPENPYXL_LXML: 'False'
+        run: |
+          python -c "import openpyxl; assert not openpyxl.LXML"
+          python -m unittest tests.test_exportador_excel tests.test_reportes -v
+
       - name: Check Django configuration
         run: python web/manage.py check
 
