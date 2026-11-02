@@ -1,13 +1,14 @@
 # Argentine VAT (IVA) invoice reports
+[Español](README.md)
 
 A personal portfolio project for Argentine accounting firms: validate sales and purchases, review rejected rows and produce monthly Excel reports.
 
-[Español](README.md) · [Documentation](README.md#documentación) · [License: MIT](LICENSE)
+[Documentation](README.md#documentación) · [License: MIT](LICENSE)
 
 ## Try it
 
 [Open the synthetic Streamlit demo](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/), with file uploads disabled.
-For local use, clone the repository with Python 3.11–3.13, create a virtual environment, then:
+CI runs Python 3.11, 3.12 and 3.13 on Linux, and Python 3.11 on Windows. For local use, clone the repository, create a virtual environment, then:
 
 ```bash
 python -m pip install -e .

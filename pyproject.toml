@@ -44,7 +44,9 @@ packages = ["automatizador", "ejemplos", "web", "web.config", "web.comprobantes"
             "web.comprobantes.migrations", "web.comprobantes.management", "web.comprobantes.management.commands"]
 
 [tool.setuptools.package-data]
-ejemplos = ["*.xlsx", "*.csv"]
+# La CLI y las demos usan la entrada; Streamlit usa el calendario sintético.
+# Lista explícita para excluir informes de muestra como salida.xlsx.
+ejemplos = ["Cliente Demo Norte.xlsx", "vencimientos_iva_2026_10.csv"]
 web = ["templates/comprobantes/*.html"]
 "web.comprobantes" = ["static/comprobantes/*"]
 

@@ -4,35 +4,20 @@ Los cambios relevantes de cada versión se registran en este archivo.
 
 ## Sin publicar
 
-- El exportador aplica formato sobre el libro abierto y guarda una sola vez, conservando las cinco hojas y su presentación. Regresiones con libros sintéticos y resultados en [rendimiento](docs/rendimiento.md).
+## [0.2.0] - 2026-11-02
 
-## [0.2.0] - 2026-10-28
-
-- README reorganizado como página de entrada, con guías técnicas en docs/, resumen en inglés y verificación automática de enlaces e imágenes.
-
-- La interfaz web local incorpora navegación, diseño adaptable, modo oscuro automático y páginas de error propias.
-- La migración SQLite v3 respalda la base y registra las operaciones; el reemplazo se limita a las operaciones aceptadas de cada cliente y período.
-- Las observaciones vigentes consideran los intentos posteriores no aplicados y el historial muestra su estado derivado.
-- Una clave normalizada identifica clientes en ambos repositorios, mientras se conserva el nombre original para mostrarlo.
-- El repositorio Django permite carga segura con vista previa, historial, observaciones y descarga del informe consolidado por período.
-- El modo demo usa datos sintéticos y ofrece consultas de solo lectura.
-
-- La web Django incorpora historial, observaciones vigentes y descarga de informes consolidados por período.
-- El modo demo local reconstruye una base con ejemplos sintéticos y ofrece acceso de solo lectura.
-
-- La interfaz local de Django permite login, alta de clientes, vista previa y confirmación de importaciones; los archivos de vista previa vencen a los 30 minutos.
-- Las cargas web limitan tamaño y estructura de archivos, y los Excel se leen en modo de solo lectura.
-- Los textos que comienzan con `=`, `+`, `-` o `@` se escriben como texto literal en las hojas Excel de todos los informes.
-- La capa opcional de Django incluye modelos, migraciones y repositorio; la CLI y Streamlit siguen usando el núcleo. La identidad de clientes se normaliza antes de guardar, y ambos repositorios generan el mismo informe.
-- El reemplazo de comprobantes se limita a cliente, período y operaciones con filas aceptadas; ventas y compras pueden coexistir.
-- Los archivos de un mismo lote que compiten por una operación quedan observados; el resto del lote continúa.
-- El historial registra operaciones y las observaciones vigentes se consultan por operación.
-- Las observaciones vigentes parten de la última importación aplicada de cada operación e incluyen intentos posteriores no aplicados; las de operación desconocida se conservan hasta la siguiente aplicación del cliente y período. El historial muestra un estado derivado, también en CLI y Streamlit.
-- La migración de SQLite a la versión 3 crea un respaldo `.v2.bak.db` antes de agregar operaciones al historial.
-- La confirmación guarda comprobantes y la generación del informe se ejecuta por separado.
-- Las filas observadas se persisten junto con el historial de importaciones.
-- La alícuota y el tipo de cambio se guardan como texto decimal canónico.
-- La migración de SQLite a la versión 2 crea un respaldo antes de convertir esos campos.
+- Migración SQLite al esquema v3 con respaldo previo según la versión de origen.
+- Reemplazo por cliente, período y operación; ventas y compras coexisten y los conflictos de lote no se aplican.
+- Observaciones persistidas y vigentes desde la última importación aplicada, con intentos posteriores e historial con estado.
+- Clave de cliente compartida con normalización Unicode, espacios y mayúsculas, conservando el nombre visible.
+- Contrato de persistencia con repositorios SQLite y Django; importes en centavos y decimales canónicos, confirmación separada del informe.
+- Web Django local con login, clientes, carga segura, vista previa temporal de un solo uso, historial y observaciones.
+- Descarga del informe Excel consolidado por período para todos los clientes y modo demo local con datos sintéticos de solo lectura.
+- Diseño web adaptable, modo oscuro y mejoras de accesibilidad: foco visible, etiquetas y estados con texto.
+- Los textos con prefijos de fórmula se escriben como texto literal en todas las hojas del informe Excel.
+- Documentación reorganizada, README en español e inglés, guías técnicas y comprobación automática de enlaces e imágenes.
+- Exportador Excel con un solo guardado, conservando las cinco hojas y su presentación; regresiones y mediciones de rendimiento.
+- Wheel limitado a los ejemplos sintéticos usados en ejecución, sin el informe de muestra; incluye plantillas y estáticos web.
 
 ## [0.1.1] - 2026-10-21
 
