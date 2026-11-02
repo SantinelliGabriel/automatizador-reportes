@@ -1,26 +1,26 @@
 # Automatizador de comprobantes e informes de IVA
+[English](README.en.md)
 
 Herramienta para estudios contables argentinos: revisa ventas y compras y genera informes mensuales en Excel.
 
 [![CI](https://github.com/SantinelliGabriel/automatizador-reportes/actions/workflows/tests.yml/badge.svg)](https://github.com/SantinelliGabriel/automatizador-reportes/actions/workflows/tests.yml) [![Cobertura](https://img.shields.io/codecov/c/github/SantinelliGabriel/automatizador-reportes/main)](https://codecov.io/gh/SantinelliGabriel/automatizador-reportes) [![Python 3.11 a 3.13](https://img.shields.io/badge/Python-3.11%E2%80%933.13-blue)](https://www.python.org/) [![Demo Streamlit](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/) [![MIT](https://img.shields.io/badge/Licencia-MIT-green)](LICENSE)
 
+Tecnologías: Python · pandas · openpyxl · SQLite · Django · Streamlit · Ruff · GitHub Actions.
 ![Recorrido con datos sintéticos y salida Excel](docs/images/flujo-demo.gif)
-
-[English](README.en.md)
 
 ## Índice
 
-[Problema](#qué-problema-resuelve) · [Prueba rápida](#probalo-en-2-minutos) · [Capacidades](#qué-incluye) · [Flujo](#cómo-funciona) · [Diseño](#decisiones-de-diseño) · [Estado](#estado-y-límites) · [Documentación](#documentación) · [Desarrollo](#desarrollo) · [Estructura](#estructura) · [Privacidad](#datos-y-privacidad) · [Licencia](#licencia)
+[Problema](#qué-problema-resuelve) · [Prueba rápida](#prueba-en-2-minutos) · [Capacidades](#qué-incluye) · [Flujo](#cómo-funciona) · [Diseño](#decisiones-de-diseño) · [Estado](#estado-y-límites) · [Documentación](#documentación) · [Desarrollo](#desarrollo) · [Estructura](#estructura) · [Privacidad](#datos-y-privacidad) · [Licencia](#licencia)
 
 ## Qué problema resuelve
 
 Un estudio contable recibe archivos de varios clientes y necesita revisar comprobantes antes de consolidar el mes.
 La herramienta conserva las filas aceptadas y reúne las observadas con el motivo para facilitar su corrección.
 
-## Probalo en 2 minutos
+## Prueba en 2 minutos
 
-[Abrir la demo Streamlit con datos ficticios](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/), sin instalación ni carga de archivos.
-Para ejecutar el ejemplo desde un clon: Python 3.11 a 3.13, probados en CI. [Instalación detallada](docs/instalacion.md).
+[Abrir la demo Streamlit con datos ficticios](https://automatizador-reportes-kqvtruqnyz7gwzj47ex7is.streamlit.app/) (puede tardar unos segundos en iniciar), sin instalación ni carga de archivos.
+Ejemplo local desde un clon. El CI ejecuta Python 3.11, 3.12 y 3.13 en Linux; Python 3.11 en Windows. [Instalación detallada](docs/instalacion.md).
 
 ### PowerShell
 
@@ -39,7 +39,11 @@ source .venv/bin/activate
 python -m pip install -e .
 automatizador --period 2026-09
 ```
-La CLI lee `ejemplos/Cliente Demo Norte.xlsx` y genera `reporte_iva.xlsx` y `comprobantes.db`.
+
+### Resultado
+
+La CLI lee el ejemplo junto al paquete instalado; crea `reporte_iva.xlsx` y `comprobantes.db` en el directorio actual.
+Abrir `reporte_iva.xlsx`: cinco hojas de comprobantes, detalle de IVA, resumen por cliente, IVA por alícuota y observaciones.
 
 ## Qué incluye
 
@@ -76,7 +80,6 @@ flowchart LR
     D --> E[Repositorio: SQLite o Django]
     E --> F[Informe Excel]
 ```
-[Arquitectura y contrato de persistencia](docs/arquitectura.md).
 
 ## Decisiones de diseño
 
@@ -103,9 +106,8 @@ La CLI y Streamlit informan su ubicación; se debe conservar hasta revisar el re
 
 ## Desarrollo
 
-Controles del [CI](https://github.com/SantinelliGabriel/automatizador-reportes/actions/workflows/tests.yml); [preparación de variables](docs/instalacion.md#entorno-para-controles-de-desarrollo).
+Instalación: `python -m pip install -e ".[dev,web]"`; [variables para controles](docs/instalacion.md#entorno-para-controles-de-desarrollo).
 ```bash
-python -m pip install -e ".[dev,web]"
 ruff check .
 coverage run -m unittest discover -s tests -v
 coverage report -m
@@ -120,16 +122,14 @@ python web/manage.py check --deploy
 python web/manage.py makemigrations --check --dry-run
 python web/manage.py collectstatic --noinput
 ```
-El CI repite `check --deploy` con modo demo activo y envía cobertura a Codecov en Linux.
-La suite incluye la comprobación de enlaces e imágenes de la documentación.
+El CI repite `check --deploy` en modo demo y envía cobertura a Codecov en Linux. La suite verifica enlaces e imágenes.
 
 ## Estructura
 
 ```text
 automatizador/   Núcleo, CLI, Streamlit, adaptadores y repositorio SQLite
 web/             Configuración Django, modelos, repositorio, pantallas y estáticos
-tests/           Suite y fixtures sintéticos, incluido tests/fixtures/arca/
-ejemplos/, datos_demo/   Entradas y salidas sintéticas
+tests/, ejemplos/, datos_demo/   Pruebas, fixtures y archivos sintéticos
 docs/, .github/, .streamlit/   Guías e imágenes; CI y configuración Streamlit
 ```
 Raíz: `main.py`, `interfaz.py`, `generar_datos_demo.py`, `demo.py`, `holistor_mapping.example.json`, `pyproject.toml`, `requirements.txt`, `.gitignore`, `AGENTS.md`, `CHANGELOG.md`, `LICENSE`, `README.md` y `README.en.md`. [Responsabilidades](docs/arquitectura.md#archivos-de-la-raíz).
@@ -138,6 +138,11 @@ Raíz: `main.py`, `interfaz.py`, `generar_datos_demo.py`, `demo.py`, `holistor_m
 
 Solo se incluyen datos sintéticos. `.gitignore` excluye `*.db`, `*.sqlite3`, `db.sqlite3`, `reporte_*.xlsx`, `datos/`, `resultados/`, `media/` y `automatizador-previews/`.
 Las vistas previas web usan por defecto un directorio temporal fuera del repositorio; no se deben colocar bajo rutas servidas.
+
+## Autor
+
+Gabriel Santinelli.
+[GitHub](https://github.com/SantinelliGabriel) · [LinkedIn](https://www.linkedin.com/in/gabrielsantinelli).
 
 ## Licencia
 

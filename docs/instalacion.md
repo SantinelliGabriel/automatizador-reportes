@@ -1,6 +1,6 @@
 # Instalación y uso
 
-Desde un clon del repositorio, con Python 3.11, 3.12 o 3.13 (matriz de CI).
+Desde un clon del repositorio. El CI ejecuta Python 3.11, 3.12 y 3.13 en Linux, y Python 3.11 en Windows.
 
 ## PowerShell
 
@@ -22,7 +22,7 @@ python -m pip install -e .
 automatizador --period 2026-09
 ```
 
-Sin `--input`, se usa `ejemplos/Cliente Demo Norte.xlsx`. Se generan `reporte_iva.xlsx` y `comprobantes.db` en el directorio actual. `--period` es obligatorio salvo para `--history`.
+Sin `--input`, se usa `ejemplos/Cliente Demo Norte.xlsx` junto al paquete instalado: en la raíz del clon con instalación editable, o en `site-packages` al instalar el wheel. Se generan `reporte_iva.xlsx` y `comprobantes.db` en el directorio actual. `--period` es obligatorio salvo para `--history`.
 
 ## Carpeta de ejemplos
 
