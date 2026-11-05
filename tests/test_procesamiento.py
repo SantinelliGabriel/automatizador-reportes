@@ -51,17 +51,24 @@ class TestProcesamiento(unittest.TestCase):
             entradas = carpeta / "entradas"
             entradas.mkdir()
             pd.DataFrame([comprobante(numero=1)]).to_csv(entradas / "Cliente Sintético.csv", index=False)
-            pd.DataFrame([comprobante(numero=2)]).to_excel(entradas / "Cliente Sintético.xlsx", index=False)
+            pd.DataFrame([
+                comprobante(numero=4, total="inválido"),
+                comprobante(numero=2),
+            ]).to_excel(entradas / "Cliente Sintético.xlsx", index=False)
             pd.DataFrame([comprobante(numero=3)]).to_csv(entradas / "Otro Cliente.csv", index=False)
             vista = previsualizar(entradas, "2026-09")
             self.assertEqual(vista.filas_validas, 1)
-            self.assertEqual(vista.filas_observadas, 2)
+            self.assertEqual(vista.filas_observadas, 3)
             self.assertEqual([a.aplicar for a in vista.archivos], [False, False, True])
+            self.assertEqual(vista.archivos[1].observaciones.set_index("numero")["fila_excel"].to_dict(), {4: 2, 2: 3})
             resultado = procesar(entradas, carpeta / "reporte.xlsx", carpeta / "comprobantes.db", "2026-09")
             self.assertEqual(resultado.comprobantes["numero"].tolist(), [3])
-            self.assertEqual(resultado.filas_observadas, 2)
-            self.assertTrue(all("Conflicto en el lote" in motivo for motivo in resultado.errores["motivo"]))
+            self.assertEqual(resultado.filas_observadas, 3)
+            self.assertEqual(resultado.errores["motivo"].str.contains("Conflicto en el lote").sum(), 2)
             self.assertEqual(len(resultado.conflictos), 2)
+            hoja = pd.read_excel(resultado.salida, sheet_name="Observaciones")
+            self.assertEqual(hoja.set_index("numero")["fila_excel"].to_dict(), {1: 2, 4: 2, 2: 3})
+            self.assertNotIn("_fila_original", hoja.columns)
 
     def test_devuelve_metricas_y_reporte_excel(self):
         entrada = ROOT / "ejemplos" / "Cliente Demo Norte.xlsx"

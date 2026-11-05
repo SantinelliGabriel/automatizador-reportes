@@ -34,7 +34,10 @@ def resolver_conflictos(importaciones):
         )
         observadas = item["comprobantes"].copy()
         observadas["motivo"] = motivo
-        observadas["fila_excel"] = range(2, len(observadas) + 2)
+        if "_fila_original" in observadas:
+            observadas["fila_excel"] = observadas.pop("_fila_original")
+        else:
+            observadas["fila_excel"] = range(2, len(observadas) + 2)
         rechazos = pd.concat([item["rechazados"], observadas], ignore_index=True)
         resultado.append({**item, "rechazados": rechazos, "aplicar": False, "conflicto": motivo})
     return resultado

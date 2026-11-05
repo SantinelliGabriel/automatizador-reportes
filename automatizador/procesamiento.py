@@ -115,7 +115,7 @@ def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mappi
                     extra["motivo"] = extra["_error_adaptador"]
                     rechazados = pd.concat([rechazados, extra], ignore_index=True)
                     aceptados = aceptados.drop(index=errores.index)
-                aceptados = aceptados.drop(columns=["_error_adaptador", "_fila_original"], errors="ignore")
+                aceptados = aceptados.drop(columns=["_error_adaptador"])
             rechazados = rechazados.drop(columns=["_error_adaptador", "_fila_original"], errors="ignore")
             if "cliente" not in rechazados.columns:
                 rechazados.insert(0, "cliente", cliente_actual)
@@ -147,7 +147,8 @@ def previsualizar(origen, periodo, formato="estandar", operacion="ventas", mappi
     } for archivo in previsualizados])
     return PrevisualizacionImportacion(periodo=periodo, archivos=tuple(
         ArchivoPrevisualizado(
-            cliente=archivo.cliente, nombre=archivo.nombre, comprobantes=archivo.comprobantes,
+            cliente=archivo.cliente, nombre=archivo.nombre,
+            comprobantes=archivo.comprobantes.drop(columns=["_fila_original"], errors="ignore"),
             observaciones=lote["rechazados"], aplicar=lote["aplicar"], sha256=archivo.sha256,
             conflicto=lote.get("conflicto"),
         ) for archivo, lote in zip(previsualizados, lotes)

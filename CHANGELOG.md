@@ -5,6 +5,7 @@ Los cambios relevantes de cada versión se registran en este archivo.
 ## Sin publicar
 
 - Rechaza identificadores fraccionarios de comprobantes y puntos de venta.
+- Conserva el número de fila del archivo original en las observaciones por conflictos de lote.
 
 ## [0.2.0] - 2026-11-02
 
