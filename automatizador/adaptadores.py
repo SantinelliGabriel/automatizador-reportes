@@ -8,7 +8,7 @@ from pathlib import Path
 
 import pandas as pd
 
-from automatizador.validaciones import clave_encabezado, normalizar_columnas
+from automatizador.validaciones import clave_encabezado, entero_exacto, normalizar_columnas
 
 
 ARCA_CAMPOS = {
@@ -193,11 +193,11 @@ def _mapear_arca(df, operacion):
             error = _agregar_error(error, "ARCA agrupa otros tributos y percepciones; este formato no permite separarlos con fiabilidad.")
         if "numero_hasta" in origen and str(row[origen["numero_hasta"]]).strip() not in {"", "nan", "None"}:
             try:
-                desde = int(_num(row[origen["numero_desde"]]))
-                hasta = int(_num(row[origen["numero_hasta"]]))
+                desde = entero_exacto(row[origen["numero_desde"]])
+                hasta = entero_exacto(row[origen["numero_hasta"]])
                 if desde != hasta:
                     error = _agregar_error(error, "El registro agrupa un rango de comprobantes; requiere desagregación previa.")
-            except (ValueError, TypeError):
+            except (ValueError, TypeError, OverflowError):
                 error = _agregar_error(error, "Número de comprobante inválido.")
 
         alicuota = 0.0

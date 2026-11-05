@@ -4,6 +4,9 @@ Los cambios relevantes de cada versión se registran en este archivo.
 
 ## Sin publicar
 
+- Rechaza identificadores fraccionarios de comprobantes y puntos de venta.
+- Conserva el número de fila del archivo original en las observaciones por conflictos de lote.
+
 ## [0.2.0] - 2026-11-02
 
 - Migración SQLite al esquema v3 con respaldo previo según la versión de origen.
