@@ -11,6 +11,17 @@ from tests.helpers import ROOT, directorio_temporal
 
 
 class TestAdaptadorArca(unittest.TestCase):
+    def test_rechaza_limite_fraccionario_del_numero_de_comprobante(self):
+        fixture = ROOT / "tests" / "fixtures" / "arca" / "mis_comprobantes_sintetico.csv"
+        tabla = pd.read_csv(fixture, dtype=str).iloc[:1].copy()
+        tabla["Número Hasta"] = tabla["Número Desde"] + ".9"
+        with directorio_temporal() as carpeta:
+            archivo = Path(carpeta) / "arca.csv"
+            tabla.to_csv(archivo, index=False)
+            resultado = leer_comprobantes(archivo, "arca").iloc[0]
+
+        self.assertIn("Número de comprobante inválido", resultado["_error_adaptador"])
+
     def test_lee_estructura_sintetica_y_conserva_varias_alicuotas(self):
         archivo = ROOT / "tests" / "fixtures" / "arca" / "mis_comprobantes_sintetico.csv"
         comprobantes = leer_comprobantes(archivo, "arca", "ventas")

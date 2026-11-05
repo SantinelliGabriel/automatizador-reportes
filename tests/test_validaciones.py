@@ -9,6 +9,23 @@ from automatizador.generar_datos_demo import cuit_sintetico
 
 
 class TestValidacionComprobantes(unittest.TestCase):
+    def test_rechaza_identificadores_fraccionarios_y_acepta_enteros_exactos(self):
+        for campo in ("punto_venta", "numero"):
+            for valor in (1.5, 101.9, Decimal("101.9"), "101.9", "101,9", float("nan"), float("inf"), None):
+                with self.subTest(campo=campo, valor=valor):
+                    fila = comprobante(**{campo: valor})
+                    aceptados, rechazados = validar_comprobantes(pd.DataFrame([fila]), "2026-09")
+                    self.assertTrue(aceptados.empty)
+                    self.assertIn("enteros válidos", rechazados.iloc[0]["motivo"])
+
+            for valor in (101, 101.0, Decimal("101.00"), "00101", "00101.0", "101,00"):
+                with self.subTest(campo=campo, valor=valor):
+                    aceptados, rechazados = validar_comprobantes(
+                        pd.DataFrame([comprobante(**{campo: valor})]), "2026-09",
+                    )
+                    self.assertTrue(rechazados.empty)
+                    self.assertEqual(aceptados.iloc[0][campo], 101)
+
     def test_rechaza_alicuota_negativa_y_tipo_de_cambio_no_positivo(self):
         filas = [
             comprobante(numero=1, alicuota="-1"),

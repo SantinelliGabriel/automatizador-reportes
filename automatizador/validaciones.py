@@ -77,6 +77,16 @@ def validar_cuit(valor):
     return int(digitos[-1]) == verificador
 
 
+def entero_exacto(valor):
+    """Lee un identificador entero sin truncar su parte fraccionaria."""
+    if isinstance(valor, str):
+        return int(re.sub(r"[.,]0+$", "", valor.strip()))
+    entero = int(valor)
+    if valor != entero:
+        raise ValueError("El identificador tiene parte fraccionaria.")
+    return entero
+
+
 def _importe(valor):
     importe = Decimal(str(valor)).quantize(CENTAVOS, rounding=ROUND_HALF_UP)
     if not importe.is_finite():
@@ -154,8 +164,8 @@ def validar_comprobantes(df, periodo):
         registro["tipo_comprobante"] = tipo
 
         try:
-            registro["punto_venta"] = int(fila["punto_venta"])
-            registro["numero"] = int(fila["numero"])
+            registro["punto_venta"] = entero_exacto(fila["punto_venta"])
+            registro["numero"] = entero_exacto(fila["numero"])
             if registro["punto_venta"] < 1 or registro["numero"] < 1:
                 motivos.append("Punto de venta y número deben ser mayores que cero.")
         except (ValueError, TypeError, OverflowError):
